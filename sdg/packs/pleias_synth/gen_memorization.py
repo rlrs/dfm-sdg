@@ -3,12 +3,14 @@ from __future__ import annotations
 import asyncio
 import json
 import re
+from collections.abc import Callable, Iterable, Iterator
 from random import Random
-from typing import Any
+from typing import Any, TextIO, TypedDict
 
 from sdg.commons import Artifact, store
 from sdg.commons import publish as common_publish
 from sdg.commons.model import LLM, load_clients
+from sdg.commons.work_queue import map_async_ordered
 from sdg.packs.pleias_synth.llm_json import achat_json
 from sdg.packs.pleias_synth.memorization_filters import (
     annotate_filter_result,
@@ -23,7 +25,27 @@ from sdg.packs.pleias_synth.memorization_text import (
     title_variants,
     tokenize,
 )
-from sdg.packs.pleias_synth.personas import build_query_plans
+from sdg.packs.pleias_synth.personas import iter_query_plans
+
+
+class MemorizationSettings(TypedDict):
+    max_rows: int
+    lead_sentences: int
+    max_sentences_per_doc: int
+    min_sentence_words: int
+    max_sentence_words: int
+    support_sentences: int
+    structured_facts: int
+    retrieve_top_k: int
+    planning_retrieve_top_k: int
+    planning_claims: int
+    use_llm: bool
+
+
+class MemorizationStats(TypedDict):
+    rows: int
+    candidate_rows: int
+    rejected_rows: int
 
 
 def generate_memorization(
@@ -32,62 +54,106 @@ def generate_memorization(
     outputs_dir,
     *,
     seed: int | None,
-) -> tuple[dict[str, Artifact], list[dict[str, Any]]]:
-    fact_bundles = sample_fact_bundles(memory, cfg, seed=seed)
-    query_plans = build_query_plans(fact_bundles, cfg, seed=seed)
-    query_plans = attach_planning_evidence(query_plans, memory["index"], memory["chunks"], cfg)
+) -> tuple[dict[str, Artifact], MemorizationStats]:
     models = _load_memorization_models(cfg)
-    candidate_rows = asyncio.run(_generate_memorization_async(query_plans, memory, cfg, models))
-
-    rows, rejected_rows = filter_rows(candidate_rows)
-
-    path = store.write_jsonl(rows, outputs_dir / "memorization_rows.jsonl")
-    candidate_path = store.write_jsonl(candidate_rows, outputs_dir / "memorization_candidates.jsonl")
-    rejected_path = store.write_jsonl(rejected_rows, outputs_dir / "memorization_rejected.jsonl")
-    common_publish.write_preview(rows, outputs_dir / "memorization_preview.jsonl", n=50)
-    common_publish.write_preview(rejected_rows, outputs_dir / "memorization_rejected_preview.jsonl", n=50)
+    _progress_log("memorization: loaded models")
+    stats = asyncio.run(_write_memorization_outputs_async(memory, cfg, outputs_dir, seed=seed, models=models))
 
     return (
         {
             "memorization_rows": Artifact(
                 name="memorization_rows",
-                path=str(path),
+                path=str(outputs_dir / "memorization_rows.jsonl"),
                 kind="jsonl",
-                meta={"rows": len(rows), "family": "memorization"},
+                meta={"rows": stats["rows"], "family": "memorization"},
             ),
             "memorization_candidates": Artifact(
                 name="memorization_candidates",
-                path=str(candidate_path),
+                path=str(outputs_dir / "memorization_candidates.jsonl"),
                 kind="jsonl",
-                meta={"rows": len(candidate_rows), "family": "memorization"},
+                meta={"rows": stats["candidate_rows"], "family": "memorization"},
             ),
             "memorization_rejected": Artifact(
                 name="memorization_rejected",
-                path=str(rejected_path),
+                path=str(outputs_dir / "memorization_rejected.jsonl"),
                 kind="jsonl",
-                meta={"rows": len(rejected_rows), "family": "memorization"},
+                meta={"rows": stats["rejected_rows"], "family": "memorization"},
             ),
         },
-        rows,
+        stats,
     )
 
 
-async def _generate_memorization_async(
-    query_plans: list[dict[str, Any]],
+async def _write_memorization_outputs_async(
     memory: dict[str, Any],
     cfg: dict[str, Any],
+    outputs_dir,
+    *,
+    seed: int | None,
     models: dict[str, LLM],
-) -> list[dict[str, Any]]:
-    rows = await backtranslate_queries_async(
-        query_plans,
-        llm=models["query_teacher"],
-        planner=models["task_planner"],
+) -> MemorizationStats:
+    rows_path = outputs_dir / "memorization_rows.jsonl"
+    candidate_path = outputs_dir / "memorization_candidates.jsonl"
+    rejected_path = outputs_dir / "memorization_rejected.jsonl"
+    rows_preview: list[dict[str, Any]] = []
+    rejected_preview: list[dict[str, Any]] = []
+    settings = _memorization_settings(cfg)
+    chunk_lookup = {chunk["id"]: chunk for chunk in memory["chunks"]}
+    worker_concurrency = _worker_concurrency(models)
+    query_plans = iter_query_plans(
+        iter_fact_bundles(memory, cfg, seed=seed),
+        cfg,
+        seed=seed,
     )
-    rows = retrieve_support(rows, memory["index"], memory["chunks"], cfg)
-    rows = await generate_backreasoning_async(rows, llm=models["reasoning_teacher"])
-    rows = await generate_answers_async(rows, llm=models["answer_teacher"])
-    rows = await judge_rows_async(rows, llm=models["judge"])
-    return rows
+    query_plans = iter_query_plans_with_evidence(
+        query_plans,
+        memory["index"],
+        chunk_lookup,
+        settings,
+    )
+    progress = _progress_reporter("memorization.rows")
+    stats: MemorizationStats = {
+        "rows": 0,
+        "candidate_rows": 0,
+        "rejected_rows": 0,
+    }
+
+    _progress_log(f"memorization: generating rows with worker_concurrency={worker_concurrency}")
+    with rows_path.open("w") as rows_handle, candidate_path.open("w") as candidate_handle, rejected_path.open("w") as rejected_handle:
+        async for row in map_async_ordered(
+            query_plans,
+            lambda index, plan: _generate_candidate_row_async(
+                index,
+                plan,
+                memory_index=memory["index"],
+                chunk_lookup=chunk_lookup,
+                settings=settings,
+                models=models,
+            ),
+            concurrency=worker_concurrency,
+            progress=progress,
+        ):
+            stats["candidate_rows"] += 1
+            _write_jsonl_line(candidate_handle, row)
+
+            reasons = row_filter_reasons(row)
+            annotated = annotate_filter_result(row, reasons)
+            if reasons:
+                stats["rejected_rows"] += 1
+                _write_jsonl_line(rejected_handle, annotated)
+                if len(rejected_preview) < 50:
+                    rejected_preview.append(annotated)
+                continue
+
+            stats["rows"] += 1
+            _write_jsonl_line(rows_handle, annotated)
+            if len(rows_preview) < 50:
+                rows_preview.append(annotated)
+
+    common_publish.write_preview(rows_preview, outputs_dir / "memorization_preview.jsonl", n=50)
+    common_publish.write_preview(rejected_preview, outputs_dir / "memorization_rejected_preview.jsonl", n=50)
+    _progress_log(f"memorization: kept {stats['rows']} rows, rejected {stats['rejected_rows']}")
+    return stats
 
 
 def filter_rows(rows: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
@@ -109,53 +175,50 @@ def sample_fact_bundles(
     *,
     seed: int | None,
 ) -> list[dict[str, Any]]:
-    generation_cfg = cfg.get("generation", {})
-    memorization_cfg = generation_cfg.get("memorization", {})
-    max_rows = int(memorization_cfg.get("max_rows", generation_cfg.get("max_rows_per_family", 200)))
-    lead_sentences = int(memorization_cfg.get("lead_sentences", 8))
-    max_sentences_per_doc = int(memorization_cfg.get("max_sentences_per_doc", 4))
-    min_words = int(memorization_cfg.get("min_sentence_words", 5))
-    max_words = int(memorization_cfg.get("max_sentence_words", 90))
-    support_sentences = int(memorization_cfg.get("support_sentences", 2))
-    structured_facts = int(memorization_cfg.get("structured_facts", 4))
+    return list(iter_fact_bundles(memory, cfg, seed=seed))
+
+
+def iter_fact_bundles(
+    memory: dict[str, Any],
+    cfg: dict[str, Any],
+    *,
+    seed: int | None,
+) -> Iterator[dict[str, Any]]:
+    settings = _memorization_settings(cfg)
 
     docs = list(memory["docs"])
     rng = Random(seed if seed is not None else 0)
     rng.shuffle(docs)
 
-    fact_bundles: list[dict[str, Any]] = []
+    produced = 0
     for doc in docs:
         candidates = _candidate_sentences(
             doc["text"],
-            lead_sentences=lead_sentences,
-            min_words=min_words,
-            max_words=max_words,
+            lead_sentences=settings["lead_sentences"],
+            min_words=settings["min_sentence_words"],
+            max_words=settings["max_sentence_words"],
         )
         if not candidates:
             continue
 
-        structured_context = _structured_facts(doc, limit=structured_facts)
-        for candidate_index, candidate in enumerate(candidates[:max_sentences_per_doc]):
+        structured_context = _structured_facts(doc, limit=settings["structured_facts"])
+        for candidate_index, candidate in enumerate(candidates[: settings["max_sentences_per_doc"]]):
             supporting_claims = [
                 row["text"]
                 for other_index, row in enumerate(candidates)
                 if other_index != candidate_index
-            ][:support_sentences]
+            ][: settings["support_sentences"]]
 
-            fact_bundles.append(
-                {
-                    "doc": doc,
-                    "primary_sentence": candidate["text"],
-                    "sentence_index": candidate["index"],
-                    "support_sentences": supporting_claims,
-                    "structured_facts": structured_context,
-                }
-            )
-
-            if len(fact_bundles) >= max_rows:
-                return fact_bundles
-
-    return fact_bundles
+            yield {
+                "doc": doc,
+                "primary_sentence": candidate["text"],
+                "sentence_index": candidate["index"],
+                "support_sentences": supporting_claims,
+                "structured_facts": structured_context,
+            }
+            produced += 1
+            if produced >= settings["max_rows"]:
+                return
 
 
 def attach_planning_evidence(
@@ -164,19 +227,24 @@ def attach_planning_evidence(
     chunks: list[dict[str, Any]],
     cfg: dict[str, Any],
 ) -> list[dict[str, Any]]:
-    memorization_cfg = cfg.get("generation", {}).get("memorization", {})
-    top_k = int(memorization_cfg.get("planning_retrieve_top_k", memorization_cfg.get("retrieve_top_k", 5)))
-    max_claims = int(memorization_cfg.get("planning_claims", 6))
     chunk_lookup = {chunk["id"]: chunk for chunk in chunks}
+    settings = _memorization_settings(cfg)
+    return list(iter_query_plans_with_evidence(query_plans, index, chunk_lookup, settings))
 
-    enriched_plans: list[dict[str, Any]] = []
+
+def iter_query_plans_with_evidence(
+    query_plans: Iterable[dict[str, Any]],
+    index: dict[str, Any],
+    chunk_lookup: dict[str, dict[str, Any]],
+    settings: MemorizationSettings,
+) -> Iterator[dict[str, Any]]:
     for plan in query_plans:
         bundle = plan["bundle"]
         seed_parts = [
             bundle["doc"]["title"],
             bundle["primary_sentence"],
-            *bundle.get("support_sentences", []),
-            *bundle.get("structured_facts", []),
+            *bundle["support_sentences"],
+            *bundle["structured_facts"],
         ]
         query_tokens = set(tokenize(" ".join(seed_parts)))
         scored_chunks: list[tuple[int, dict[str, Any]]] = []
@@ -206,29 +274,17 @@ def attach_planning_evidence(
                 "score": score,
                 "snippet": chunk["text"],
             }
-            for score, chunk in scored_chunks[:top_k]
+            for score, chunk in scored_chunks[: settings["planning_retrieve_top_k"]]
         ]
 
         updated = dict(plan)
         updated["planning_sources"] = planning_sources
-        updated["planning_claims"] = _planning_claims(bundle, planning_sources, limit=max_claims)
-        enriched_plans.append(updated)
-
-    return enriched_plans
-
-
-async def backtranslate_queries_async(
-    query_plans: list[dict[str, Any]],
-    *,
-    llm: LLM,
-    planner: LLM,
-) -> list[dict[str, Any]]:
-    tasks = [
-        _make_row_async(plan, index, llm=llm, planner=planner)
-        for index, plan in enumerate(query_plans)
-    ]
-    built_rows = await asyncio.gather(*tasks)
-    return [row for row in built_rows if row is not None]
+        updated["planning_claims"] = _planning_claims(
+            bundle,
+            planning_sources,
+            limit=settings["planning_claims"],
+        )
+        yield updated
 
 
 def retrieve_support(
@@ -237,89 +293,140 @@ def retrieve_support(
     chunks: list[dict[str, Any]],
     cfg: dict[str, Any],
 ) -> list[dict[str, Any]]:
-    memorization_cfg = cfg.get("generation", {}).get("memorization", {})
-    top_k = int(memorization_cfg.get("retrieve_top_k", 5))
+    settings = _memorization_settings(cfg)
     chunk_lookup = {chunk["id"]: chunk for chunk in chunks}
-
-    enriched_rows: list[dict[str, Any]] = []
-    for row in rows:
-        query_tokens = set(tokenize(row["prompt"]))
-        scored_chunks: list[tuple[int, dict[str, Any]]] = []
-        for chunk_id, entry in index["chunks"].items():
-            overlap = len(query_tokens.intersection(entry["tokens"]))
-            if overlap == 0:
-                continue
-
-            chunk = chunk_lookup[chunk_id]
-            scored_chunks.append((overlap, chunk))
-
-        scored_chunks.sort(
-            key=lambda item: (
-                item[0],
-                item[1]["doc_id"] == row["hidden"]["source_id"],
-                item[1]["meta"]["word_count"],
-            ),
-            reverse=True,
-        )
-
-        sources = [
-            {
-                "chunk_id": chunk["id"],
-                "source_id": chunk["source_id"],
-                "title": chunk["title"],
-                "url": chunk.get("url"),
-                "score": score,
-                "snippet": chunk["text"],
-            }
-            for score, chunk in scored_chunks[:top_k]
-        ]
-
-        updated = dict(row)
-        updated["sources"] = sources
-        enriched_rows.append(updated)
-
-    return enriched_rows
+    return [retrieve_support_row(row, index, chunk_lookup, settings) for row in rows]
 
 
-async def generate_backreasoning_async(rows: list[dict[str, Any]], *, llm: LLM) -> list[dict[str, Any]]:
-    traces = await asyncio.gather(*[_llm_backreasoning_async(row, llm) for row in rows])
-    enriched_rows: list[dict[str, Any]] = []
-    for row, trace in zip(rows, traces, strict=True):
-        hidden = dict(row["hidden"])
-        hidden["teacher_backreasoning"] = trace
+def retrieve_support_row(
+    row: dict[str, Any],
+    index: dict[str, Any],
+    chunk_lookup: dict[str, dict[str, Any]],
+    settings: MemorizationSettings,
+) -> dict[str, Any]:
+    query_tokens = set(tokenize(row["prompt"]))
+    scored_chunks: list[tuple[int, dict[str, Any]]] = []
+    for chunk_id, entry in index["chunks"].items():
+        overlap = len(query_tokens.intersection(entry["tokens"]))
+        if overlap == 0:
+            continue
 
-        updated = dict(row)
-        updated["hidden"] = hidden
-        updated["reasoning"] = _render_reasoning(trace)
+        chunk = chunk_lookup[chunk_id]
+        scored_chunks.append((overlap, chunk))
 
-        proposed_target = str(trace.get("proposed_target", "")).strip()
-        if proposed_target and _target_needs_upgrade(updated):
-            updated["target"] = proposed_target
+    scored_chunks.sort(
+        key=lambda item: (
+            item[0],
+            item[1]["doc_id"] == row["hidden"]["source_id"],
+            item[1]["meta"]["word_count"],
+        ),
+        reverse=True,
+    )
 
-        enriched_rows.append(updated)
-    return enriched_rows
+    sources = [
+        {
+            "chunk_id": chunk["id"],
+            "source_id": chunk["source_id"],
+            "title": chunk["title"],
+            "url": chunk.get("url"),
+            "score": score,
+            "snippet": chunk["text"],
+        }
+        for score, chunk in scored_chunks[: settings["retrieve_top_k"]]
+    ]
+
+    updated = dict(row)
+    updated["sources"] = sources
+    return updated
 
 
-async def generate_answers_async(rows: list[dict[str, Any]], *, llm: LLM) -> list[dict[str, Any]]:
-    targets = await asyncio.gather(*[_generate_answer_async(row, llm) for row in rows])
-    enriched_rows: list[dict[str, Any]] = []
-    for row, target in zip(rows, targets, strict=True):
-        updated = dict(row)
-        updated["target"] = target
-        enriched_rows.append(updated)
-    return enriched_rows
+def with_backreasoning(row: dict[str, Any], trace: dict[str, Any]) -> dict[str, Any]:
+    hidden = dict(row["hidden"])
+    hidden["teacher_backreasoning"] = trace
+
+    updated = dict(row)
+    updated["hidden"] = hidden
+    updated["reasoning"] = _render_reasoning(trace)
+
+    proposed_target = trace["proposed_target"]
+    if proposed_target and _target_needs_upgrade(updated):
+        updated["target"] = proposed_target
+
+    return updated
 
 
-async def judge_rows_async(rows: list[dict[str, Any]], *, llm: LLM) -> list[dict[str, Any]]:
-    judgments = await asyncio.gather(*[_judge_row_async(row, llm) for row in rows])
-    judged_rows: list[dict[str, Any]] = []
-    for row, judge in zip(rows, judgments, strict=True):
-        updated = dict(row)
-        scores = dict(row.get("scores") or {})
-        scores["judge"] = judge
-        updated["scores"] = scores
-        judged_rows.append(updated)
-    return judged_rows
+def with_target(row: dict[str, Any], target: str) -> dict[str, Any]:
+    updated = dict(row)
+    updated["target"] = target
+    return updated
+
+
+def with_judge(row: dict[str, Any], judge: dict[str, Any]) -> dict[str, Any]:
+    updated = dict(row)
+    scores = dict(row["scores"])
+    scores["judge"] = judge
+    updated["scores"] = scores
+    return updated
+
+
+def _progress_log(message: str) -> None:
+    print(f"[pleias_synth] {message}", flush=True)
+
+
+def _progress_reporter(label: str) -> Callable[[int, int | None, int], None]:
+    next_log = {"count": 1}
+
+    def report(completed: int, total: int | None, elapsed: int) -> None:
+        total_text = "?" if total is None else str(total)
+        if completed == 0:
+            _progress_log(f"{label}: 0/{total_text}")
+            return
+
+        if completed < next_log["count"]:
+            return
+
+        _progress_log(f"{label}: {completed}/{total_text} ({elapsed}s)")
+        if total is not None and total <= 10:
+            next_log["count"] = completed + 1
+            return
+        if total is None:
+            next_log["count"] = completed + 10
+            return
+        next_log["count"] = completed + max(1, total // 10)
+
+    return report
+
+
+def _worker_concurrency(models: dict[str, LLM]) -> int:
+    limits = [
+        getattr(getattr(model, "runtime", None), "max_concurrency", 1)
+        for model in models.values()
+    ]
+    return max(limits)
+
+
+def _write_jsonl_line(handle: TextIO, row: dict[str, Any]) -> None:
+    handle.write(json.dumps(row, sort_keys=True))
+    handle.write("\n")
+
+
+async def _generate_candidate_row_async(
+    index: int,
+    plan: dict[str, Any],
+    *,
+    memory_index: dict[str, Any],
+    chunk_lookup: dict[str, dict[str, Any]],
+    settings: MemorizationSettings,
+    models: dict[str, LLM],
+) -> dict[str, Any]:
+    row = await _make_row_async(plan, index, llm=models["query_teacher"], planner=models["task_planner"])
+    row = retrieve_support_row(row, memory_index, chunk_lookup, settings)
+    trace = await _llm_backreasoning_async(row, models["reasoning_teacher"])
+    row = with_backreasoning(row, trace)
+    target = await _generate_answer_async(row, models["answer_teacher"])
+    row = with_target(row, target)
+    judge = await _judge_row_async(row, models["judge"])
+    return with_judge(row, judge)
 
 
 def format_teacher_bundle(teacher_bundle: dict[str, Any]) -> str:
@@ -328,26 +435,26 @@ def format_teacher_bundle(teacher_bundle: dict[str, Any]) -> str:
         f"Primary claim: {teacher_bundle['primary_claim']}",
     ]
 
-    supporting_claims = teacher_bundle.get("supporting_claims") or []
+    supporting_claims = teacher_bundle["supporting_claims"]
     if supporting_claims:
         parts.append(
             "Supporting claims:\n" + "\n".join(f"- {claim}" for claim in supporting_claims)
         )
 
-    structured_context = teacher_bundle.get("structured_context") or []
+    structured_context = teacher_bundle["structured_context"]
     if structured_context:
         parts.append(
             "Structured context:\n" + "\n".join(f"- {item}" for item in structured_context)
         )
 
-    retrieved_context = teacher_bundle.get("retrieved_context") or []
+    retrieved_context = teacher_bundle["retrieved_context"]
     if retrieved_context:
         parts.append(
             "Retrieved context:\n"
             + "\n".join(f"- {item['title']}: {item['snippet']}" for item in retrieved_context[:5])
         )
 
-    retrieved_claims = teacher_bundle.get("retrieved_claims") or []
+    retrieved_claims = teacher_bundle["retrieved_claims"]
     if retrieved_claims:
         parts.append(
             "Retrieved claims:\n" + "\n".join(f"- {item}" for item in retrieved_claims[:6])
@@ -364,11 +471,11 @@ def _planning_claims(
 ) -> list[str]:
     seen = {
         normalize_text(bundle["primary_sentence"]),
-        *(normalize_text(sentence) for sentence in bundle.get("support_sentences", [])),
+        *(normalize_text(sentence) for sentence in bundle["support_sentences"]),
     }
     claims: list[str] = []
     for source in planning_sources:
-        for sentence in split_sentences(source.get("snippet", "")):
+        for sentence in split_sentences(source["snippet"]):
             normalized = normalize_text(sentence)
             if not normalized or normalized in seen:
                 continue
@@ -385,7 +492,7 @@ async def _make_row_async(
     *,
     llm: LLM,
     planner: LLM,
-) -> dict[str, Any] | None:
+) -> dict[str, Any]:
     bundle = plan["bundle"]
     persona = plan["persona"]
     query_angle = plan["query_angle"]
@@ -401,15 +508,13 @@ async def _make_row_async(
         query_angle,
         query_profile,
         task_plan,
-        plan.get("planning_sources") or [],
+        plan["planning_sources"],
         llm,
     )
-    if question is None:
-        return None
 
     teacher_bundle = _build_teacher_bundle(doc, bundle)
-    teacher_bundle["retrieved_context"] = list(plan.get("planning_sources") or [])
-    teacher_bundle["retrieved_claims"] = list(plan.get("planning_claims") or [])
+    teacher_bundle["retrieved_context"] = list(plan["planning_sources"])
+    teacher_bundle["retrieved_claims"] = list(plan["planning_claims"])
 
     target_seed = _default_target(doc, bundle, task_plan)
 
@@ -425,7 +530,7 @@ async def _make_row_async(
             "sentence": bundle["primary_sentence"],
             "sentence_index": bundle["sentence_index"],
             "question_type": question["question_type"],
-            "generation_mode": question.get("generation_mode", "llm"),
+            "generation_mode": question["generation_mode"],
             "persona": persona,
             "query_angle": query_angle,
             "query_profile": query_profile,
@@ -464,18 +569,18 @@ def _build_teacher_bundle(doc: dict[str, Any], bundle: dict[str, Any]) -> dict[s
     return {
         "article_title": doc["title"],
         "primary_claim": bundle["primary_sentence"],
-        "supporting_claims": list(bundle.get("support_sentences") or []),
-        "structured_context": list(bundle.get("structured_facts") or []),
+        "supporting_claims": list(bundle["support_sentences"]),
+        "structured_context": list(bundle["structured_facts"]),
         "retrieved_context": [],
         "retrieved_claims": [],
     }
 
 
 def _default_target(doc: dict[str, Any], bundle: dict[str, Any], task_plan: dict[str, Any]) -> str:
-    if task_plan.get("task_type") in {"reverse_definition", "source_clue", "identification"}:
+    if task_plan["task_type"] in {"reverse_definition", "source_clue", "identification"}:
         return doc["title"]
 
-    coverage_points = as_list(task_plan.get("coverage_points"))
+    coverage_points = as_list(task_plan["coverage_points"])
     if len(coverage_points) >= 2:
         return " ".join(coverage_points[:2])
 
@@ -512,7 +617,7 @@ def _task_plan_messages(plan: dict[str, Any]) -> list[dict[str, str]]:
     bundle = plan["bundle"]
     persona = plan["persona"]
     query_profile = plan["query_profile"]
-    planning_sources = plan.get("planning_sources") or []
+    planning_sources = plan["planning_sources"]
 
     evidence_block = "\n".join(
         f"- {source['title']}: {source['snippet']}"
@@ -551,9 +656,9 @@ def _task_plan_messages(plan: dict[str, Any]) -> list[dict[str, str]]:
                 f"Article title: {bundle['doc']['title']}\n"
                 f"Primary claim: {bundle['primary_sentence']}\n"
                 "Supporting claims:\n"
-                + "\n".join(f"- {claim}" for claim in bundle.get("support_sentences", []))
+                + "\n".join(f"- {claim}" for claim in bundle["support_sentences"])
                 + "\n\nStructured context:\n"
-                + "\n".join(f"- {item}" for item in bundle.get("structured_facts", []))
+                + "\n".join(f"- {item}" for item in bundle["structured_facts"])
                 + "\n\nRetrieved evidence:\n"
                 + evidence_block
             ),
@@ -597,9 +702,9 @@ def bundle_query_brief(plan: dict[str, Any]) -> str:
 def _default_coverage_points(plan: dict[str, Any]) -> list[str]:
     bundle = plan["bundle"]
     coverage_points = [bundle["primary_sentence"]]
-    coverage_points.extend(bundle.get("support_sentences", [])[:2])
-    coverage_points.extend(bundle.get("structured_facts", [])[:2])
-    coverage_points.extend(plan.get("planning_claims", [])[:2])
+    coverage_points.extend(bundle["support_sentences"][:2])
+    coverage_points.extend(bundle["structured_facts"][:2])
+    coverage_points.extend(plan["planning_claims"][:2])
     return coverage_points[:4]
 
 
@@ -612,7 +717,7 @@ async def _llm_question_async(
     task_plan: dict[str, Any],
     planning_sources: list[dict[str, Any]],
     llm: LLM,
-) -> dict[str, str] | None:
+) -> dict[str, str]:
     messages = _question_messages(doc, bundle, persona, query_angle, query_profile, task_plan, planning_sources)
     parsed = await achat_json(llm, messages, temperature=0.4)
     return _parse_question(parsed, task_plan)
@@ -629,7 +734,7 @@ def _question_messages(
 ) -> list[dict[str, str]]:
     teacher_bundle = _build_teacher_bundle(doc, bundle)
     teacher_bundle["retrieved_context"] = list(planning_sources)
-    exemplars = query_profile.get("exemplars") or []
+    exemplars = query_profile["exemplars"]
     exemplar_block = ""
     if exemplars:
         exemplar_block = "Query profile exemplars:\n" + "\n".join(f"- {item}" for item in exemplars) + "\n\n"
@@ -684,11 +789,10 @@ def _question_messages(
     ]
 
 
-def _parse_question(parsed: dict[str, Any], task_plan: dict[str, Any]) -> dict[str, str] | None:
+def _parse_question(parsed: dict[str, Any], task_plan: dict[str, Any]) -> dict[str, str]:
     prompt = str(parsed.get("prompt", "")).strip()
     question_type = str(parsed.get("question_type", task_plan["task_type"])).strip() or task_plan["task_type"]
-    if not prompt:
-        return None
+    assert prompt, "memorization question prompt must not be empty"
 
     return {
         "prompt": prompt,
@@ -705,10 +809,10 @@ async def _llm_backreasoning_async(row: dict[str, Any], llm: LLM) -> dict[str, A
 
 def _backreasoning_messages(row: dict[str, Any]) -> list[dict[str, str]]:
     teacher_bundle = row["hidden"]["teacher_bundle"]
-    task_plan = row["hidden"].get("task_plan") or {}
+    task_plan = row["hidden"]["task_plan"]
     source_snippets = "\n\n".join(
         f"- {source['title']}: {source['snippet']}"
-        for source in row.get("sources", [])[:3]
+        for source in row["sources"][:3]
     )
     return [
         {
@@ -731,11 +835,11 @@ def _backreasoning_messages(row: dict[str, Any]) -> list[dict[str, str]]:
                 f"Question type: {row['meta'].get('question_type')}\n"
                 f"Persona id: {row['meta'].get('persona_id')}\n"
                 f"Query angle: {row['meta'].get('query_angle')}\n\n"
-                f"Task type: {task_plan.get('task_type', '')}\n"
-                f"User goal: {task_plan.get('user_goal', '')}\n"
-                f"Answer shape: {task_plan.get('answer_shape', '')}\n"
+                f"Task type: {task_plan['task_type']}\n"
+                f"User goal: {task_plan['user_goal']}\n"
+                f"Answer shape: {task_plan['answer_shape']}\n"
                 "Coverage points:\n"
-                + "\n".join(f"- {item}" for item in task_plan.get("coverage_points", []))
+                + "\n".join(f"- {item}" for item in task_plan["coverage_points"])
                 + "\n\n"
                 f"{format_teacher_bundle(teacher_bundle)}\n\n"
                 f"Hidden grounding facts:\n{source_snippets}\n\n"
@@ -754,7 +858,7 @@ def _parse_backreasoning(row: dict[str, Any], parsed: dict[str, Any]) -> dict[st
         "reasoning_steps": clean_recall_list(parsed.get("reasoning_steps")),
         "caveats": clean_recall_list(parsed.get("caveats")),
         "synthesis": clean_recall_text(str(parsed.get("synthesis", "")).strip())
-        or _default_synthesis(row, row.get("target", "")),
+        or _default_synthesis(row, row["target"]),
         "proposed_target": str(parsed.get("proposed_target", "")).strip(),
     }
 
@@ -796,11 +900,11 @@ def _answer_messages(row: dict[str, Any]) -> list[dict[str, str]]:
     persona = row["hidden"]["persona"]
     query_profile = row["hidden"]["query_profile"]
     assistant_style = row["hidden"]["assistant_style"]
-    task_plan = row["hidden"].get("task_plan") or {}
-    target_seed = row["hidden"].get("target_seed", "")
+    task_plan = row["hidden"]["task_plan"]
+    target_seed = row["hidden"]["target_seed"]
     source_snippets = "\n\n".join(
         f"- {source['title']}: {source['snippet']}"
-        for source in row.get("sources", [])[:5]
+        for source in row["sources"][:5]
     )
 
     return [
@@ -829,11 +933,11 @@ def _answer_messages(row: dict[str, Any]) -> list[dict[str, str]]:
             "content": (
                 f"Prompt: {row['prompt']}\n\n"
                 f"Question type: {row['meta'].get('question_type')}\n"
-                f"Task type: {task_plan.get('task_type', '')}\n"
-                f"User goal: {task_plan.get('user_goal', '')}\n"
-                f"Answer shape: {task_plan.get('answer_shape', '')}\n"
+                f"Task type: {task_plan['task_type']}\n"
+                f"User goal: {task_plan['user_goal']}\n"
+                f"Answer shape: {task_plan['answer_shape']}\n"
                 "Coverage points:\n"
-                + "\n".join(f"- {item}" for item in task_plan.get("coverage_points", []))
+                + "\n".join(f"- {item}" for item in task_plan["coverage_points"])
                 + "\n\n"
                 f"User persona name: {persona['name']}\n"
                 f"User intent: {persona['intent']}\n"
@@ -876,8 +980,8 @@ def _parse_target(parsed: dict[str, Any], row: dict[str, Any]) -> str:
 
 
 def _default_answer_from_trace(row: dict[str, Any]) -> str:
-    trace = row["hidden"].get("teacher_backreasoning") or {}
-    proposed_target = str(trace.get("proposed_target", "")).strip()
+    trace = row["hidden"]["teacher_backreasoning"]
+    proposed_target = trace["proposed_target"]
     if proposed_target:
         return " ".join(proposed_target.split())
     return " ".join(str(row["target"]).split())
@@ -891,10 +995,10 @@ async def _judge_row_async(row: dict[str, Any], llm: LLM) -> dict[str, Any]:
 
 def _judge_messages(row: dict[str, Any]) -> list[dict[str, str]]:
     teacher_bundle = row["hidden"]["teacher_bundle"]
-    task_plan = row["hidden"].get("task_plan") or {}
+    task_plan = row["hidden"]["task_plan"]
     source_snippets = "\n\n".join(
         f"- {source['title']}: {source['snippet']}"
-        for source in row.get("sources", [])[:3]
+        for source in row["sources"][:3]
     )
     return [
         {
@@ -916,10 +1020,10 @@ def _judge_messages(row: dict[str, Any]) -> list[dict[str, str]]:
                 f"Persona id: {row['meta'].get('persona_id')}\n"
                 f"Query angle: {row['meta'].get('query_angle')}\n\n"
                 f"Query profile id: {row['meta'].get('query_profile_id')}\n\n"
-                f"Task type: {task_plan.get('task_type', '')}\n"
-                f"User goal: {task_plan.get('user_goal', '')}\n"
+                f"Task type: {task_plan['task_type']}\n"
+                f"User goal: {task_plan['user_goal']}\n"
                 "Coverage points:\n"
-                + "\n".join(f"- {item}" for item in task_plan.get("coverage_points", []))
+                + "\n".join(f"- {item}" for item in task_plan["coverage_points"])
                 + "\n\n"
                 f"{format_teacher_bundle(teacher_bundle)}\n\n"
                 f"Retrieved support:\n{source_snippets}"
@@ -940,8 +1044,7 @@ def _parse_judge(parsed: dict[str, Any]) -> dict[str, Any]:
 
 
 def _default_key_question(row: dict[str, Any]) -> str:
-    task_plan = row["hidden"].get("task_plan") or {}
-    task_type = task_plan.get("task_type", row["meta"].get("question_type"))
+    task_type = row["hidden"]["task_plan"]["task_type"]
     if task_type in {"reverse_definition", "source_clue", "identification"}:
         return "Which article title is uniquely identified by the clue?"
     if task_type in {"overview", "planning", "comparison", "timeline", "explanation"}:
@@ -956,7 +1059,7 @@ def _default_synthesis(row: dict[str, Any], target: str) -> str:
 
 
 def _target_needs_upgrade(row: dict[str, Any]) -> bool:
-    current_target = str(row.get("target", "")).strip()
+    current_target = str(row["target"]).strip()
     if not current_target:
         return True
     return current_target == row["hidden"]["sentence"]
@@ -1009,8 +1112,8 @@ def _structured_facts(doc: dict[str, Any], *, limit: int) -> list[str]:
 
 
 def _load_memorization_models(cfg: dict[str, Any]) -> dict[str, LLM]:
-    memorization_cfg = cfg.get("generation", {}).get("memorization", {})
-    if memorization_cfg.get("use_llm") is False:
+    settings = _memorization_settings(cfg)
+    if not settings["use_llm"]:
         raise ValueError("PleIAs memorization generation requires LLM-backed models")
 
     model_refs = cfg.get("models", {})
@@ -1028,3 +1131,52 @@ def _load_memorization_models(cfg: dict[str, Any]) -> dict[str, LLM]:
     roles = ["task_planner", "query_teacher", "reasoning_teacher", "answer_teacher", "judge"]
     clients = load_clients({role: requested_roles[role] for role in roles})
     return {role: clients[role] for role in roles}
+
+
+def _memorization_settings(cfg: dict[str, Any]) -> MemorizationSettings:
+    generation_cfg = cfg.get("generation", {})
+    assert isinstance(generation_cfg, dict), "generation config must be a mapping"
+
+    memorization_cfg = generation_cfg.get("memorization", {})
+    assert isinstance(memorization_cfg, dict), "memorization config must be a mapping"
+
+    max_rows = _positive_int(
+        memorization_cfg,
+        "max_rows",
+        default=_positive_int(generation_cfg, "max_rows_per_family", default=200),
+    )
+    retrieve_top_k = _positive_int(memorization_cfg, "retrieve_top_k", default=5)
+
+    return {
+        "max_rows": max_rows,
+        "lead_sentences": _positive_int(memorization_cfg, "lead_sentences", default=8),
+        "max_sentences_per_doc": _positive_int(memorization_cfg, "max_sentences_per_doc", default=4),
+        "min_sentence_words": _positive_int(memorization_cfg, "min_sentence_words", default=5),
+        "max_sentence_words": _positive_int(memorization_cfg, "max_sentence_words", default=90),
+        "support_sentences": _positive_int(memorization_cfg, "support_sentences", default=2),
+        "structured_facts": _positive_int(memorization_cfg, "structured_facts", default=4),
+        "retrieve_top_k": retrieve_top_k,
+        "planning_retrieve_top_k": _positive_int(
+            memorization_cfg,
+            "planning_retrieve_top_k",
+            default=retrieve_top_k,
+        ),
+        "planning_claims": _positive_int(memorization_cfg, "planning_claims", default=6),
+        "use_llm": _bool_value(memorization_cfg, "use_llm", default=True),
+    }
+
+
+def _positive_int(record: dict[str, Any], key: str, *, default: int) -> int:
+    value = record.get(key)
+    if value is None:
+        return default
+    assert isinstance(value, int) and value > 0, f"{key} must be a positive integer"
+    return value
+
+
+def _bool_value(record: dict[str, Any], key: str, *, default: bool) -> bool:
+    value = record.get(key)
+    if value is None:
+        return default
+    assert isinstance(value, bool), f"{key} must be a boolean"
+    return value

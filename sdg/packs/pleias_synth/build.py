@@ -113,9 +113,9 @@ def _build_run(
 
     generation = cfg["generation"]
     families = {str(item) for item in generation["families"]}
-    memorization_rows: list[dict[str, Any]] = []
+    memorization_stats: dict[str, Any] = {}
     if "memorization" in families:
-        memorization_artifacts, memorization_rows = generate_memorization(
+        memorization_artifacts, memorization_stats = generate_memorization(
             cfg,
             memory,
             outputs_dir,
@@ -131,9 +131,9 @@ def _build_run(
                 "index_type": memory["index"]["type"],
             },
             "memorization": {
-                "rows": len(memorization_rows),
+                "rows": memorization_stats["rows"],
             }
-            if memorization_rows
+            if memorization_stats
             else {},
         },
         outputs_dir / "metrics.json",
