@@ -153,6 +153,13 @@ def test_pleias_memory_core_flow(tmp_path, monkeypatch) -> None:
     assert (out_dir / "eval.parquet").exists()
     assert (out_dir / "memorization_candidates.jsonl").exists()
     assert (out_dir / "memorization_rejected.jsonl").exists()
+    assert (Path(result.run_dir) / "outputs" / "memorization_progress.json").exists()
+    assert (Path(result.run_dir) / "outputs" / "llm_json_metrics.json").exists()
+    assert (Path(result.run_dir) / "logs" / "events.jsonl").exists()
+
+    progress = json.loads((Path(result.run_dir) / "outputs" / "memorization_progress.json").read_text())
+    assert progress["stage"] == "completed"
+    assert progress["rows"] >= 2
 
     train_rows = store.read_parquet(out_dir / "train.parquet")
     assert train_rows

@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
+from sdg.commons.run_log import activate_run_log, log_event
 from sdg.commons.store import ensure_dir
 from sdg.commons.utils import (
     artifacts_root,
@@ -87,29 +88,55 @@ def run(
     write_json(manifest, run_dir / "manifest.json")
     write_yaml(cfg, run_dir / "config.yaml")
 
-    try:
-        artifacts = fn(
-            cfg=cfg,
-            outputs_dir=outputs_dir,
-            seed=seed,
+    with activate_run_log(run_dir):
+        log_event(
+            "run",
+            "started",
+            pack=pack,
+            entrypoint=entrypoint,
+            run_id=run_id,
+            spec_hash=spec_hash,
         )
-    except Exception as error:
-        manifest["status"] = "failed"
+        try:
+            artifacts = fn(
+                cfg=cfg,
+                outputs_dir=outputs_dir,
+                seed=seed,
+            )
+        except Exception as error:
+            manifest["status"] = "failed"
+            manifest["finished_at"] = iso_timestamp()
+            manifest["error"] = {
+                "type": error.__class__.__name__,
+                "message": str(error),
+            }
+            write_json(manifest, run_dir / "manifest.json")
+            log_event(
+                "run",
+                "failed",
+                pack=pack,
+                entrypoint=entrypoint,
+                run_id=run_id,
+                error_type=error.__class__.__name__,
+                error_message=str(error),
+            )
+            raise
+
+        manifest["status"] = "completed"
         manifest["finished_at"] = iso_timestamp()
-        manifest["error"] = {
-            "type": error.__class__.__name__,
-            "message": str(error),
+        manifest["output_artifacts"] = {
+            name: _artifact_to_dict(artifact)
+            for name, artifact in artifacts.items()
         }
         write_json(manifest, run_dir / "manifest.json")
-        raise
-
-    manifest["status"] = "completed"
-    manifest["finished_at"] = iso_timestamp()
-    manifest["output_artifacts"] = {
-        name: _artifact_to_dict(artifact)
-        for name, artifact in artifacts.items()
-    }
-    write_json(manifest, run_dir / "manifest.json")
+        log_event(
+            "run",
+            "completed",
+            pack=pack,
+            entrypoint=entrypoint,
+            run_id=run_id,
+            artifacts=sorted(artifacts),
+        )
 
     return BuildResult(
         run_id=run_id,

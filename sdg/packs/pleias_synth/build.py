@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Any
 
 from sdg.commons import Artifact, BuildResult, store
+from sdg.commons.run_log import log_event
 from sdg.commons.run import load, run
 from sdg.commons.store import read_jsonl
 from sdg.commons.utils import read_json, write_json
@@ -108,7 +109,15 @@ def _build_run(
     outputs_dir: Path,
     seed: int | None,
 ) -> dict[str, Artifact]:
+    log_event("pleias_synth", "memory_core_started")
     memory = build_memory_core(cfg, outputs_dir)
+    log_event(
+        "pleias_synth",
+        "memory_core_completed",
+        sources=len(memory["source_table"]),
+        chunks=len(memory["chunks"]),
+        index_type=memory["index"]["type"],
+    )
     artifacts = dict(memory["artifacts"])
 
     generation = cfg["generation"]

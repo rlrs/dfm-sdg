@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import json
 import re
+import time
 from collections.abc import Callable, Iterable, Iterator
 from random import Random
 from typing import Any, TextIO, TypedDict
@@ -10,6 +11,7 @@ from typing import Any, TextIO, TypedDict
 from sdg.commons import Artifact, store
 from sdg.commons import publish as common_publish
 from sdg.commons.model import LLM, load_clients
+from sdg.commons.run_log import log_event, write_snapshot
 from sdg.commons.work_queue import map_async_unordered
 from sdg.packs.pleias_synth.languages import LanguagePlan, language_name, load_language_plan
 from sdg.packs.pleias_synth.llm_json import achat_json
@@ -48,6 +50,67 @@ class MemorizationStats(TypedDict):
     rows: int
     candidate_rows: int
     rejected_rows: int
+
+
+class _MemorizationProgressTracker:
+    def __init__(self, *, worker_concurrency: int):
+        self.worker_concurrency = worker_concurrency
+        self.started_at = time.monotonic()
+        self.stage = "initializing"
+        self.completed = 0
+        self.total: int | None = None
+        self.candidate_rows = 0
+        self.rows = 0
+        self.rejected_rows = 0
+        self.reject_reasons: dict[str, int] = {}
+
+    def start(self) -> None:
+        self.stage = "generating_rows"
+        self._write(force=True)
+
+    def on_progress(self, completed: int, total: int | None, elapsed: int) -> None:
+        self.completed = completed
+        self.total = total
+        self._write(elapsed_seconds=elapsed)
+
+    def on_row(self, reasons: list[str]) -> None:
+        self.candidate_rows += 1
+        if reasons:
+            self.rejected_rows += 1
+            for reason in reasons:
+                self.reject_reasons[reason] = self.reject_reasons.get(reason, 0) + 1
+        else:
+            self.rows += 1
+        self._write()
+
+    def finish(self) -> None:
+        self.stage = "completed"
+        self._write(force=True)
+
+    def _write(self, *, elapsed_seconds: int | None = None, force: bool = False) -> None:
+        elapsed = elapsed_seconds
+        if elapsed is None:
+            elapsed = int(time.monotonic() - self.started_at)
+        candidates_per_minute = 0.0
+        if elapsed > 0:
+            candidates_per_minute = round(self.candidate_rows * 60 / elapsed, 2)
+        write_snapshot(
+            "memorization_progress.json",
+            {
+                "stage": self.stage,
+                "worker_concurrency": self.worker_concurrency,
+                "completed": self.completed,
+                "total": self.total,
+                "elapsed_seconds": elapsed,
+                "candidate_rows": self.candidate_rows,
+                "rows": self.rows,
+                "rejected_rows": self.rejected_rows,
+                "reject_reasons": dict(sorted(self.reject_reasons.items())),
+                "candidates_per_minute": candidates_per_minute,
+            },
+            force=force,
+            min_interval_seconds=1.0,
+        )
 
 
 def generate_memorization(
@@ -113,14 +176,21 @@ async def _write_memorization_outputs_async(
         chunk_lookup,
         settings,
     )
-    progress = _progress_reporter("memorization.rows")
     stats: MemorizationStats = {
         "rows": 0,
         "candidate_rows": 0,
         "rejected_rows": 0,
     }
+    tracker = _MemorizationProgressTracker(worker_concurrency=worker_concurrency)
+    progress = _progress_reporter("memorization.rows", tracker)
 
     _progress_log(f"memorization: generating rows with worker_concurrency={worker_concurrency}")
+    log_event(
+        "pleias_synth",
+        "memorization_started",
+        worker_concurrency=worker_concurrency,
+    )
+    tracker.start()
     with rows_path.open("w") as rows_handle, candidate_path.open("w") as candidate_handle, rejected_path.open("w") as rejected_handle:
         async for row in map_async_unordered(
             query_plans,
@@ -140,6 +210,7 @@ async def _write_memorization_outputs_async(
 
             reasons = row_filter_reasons(row)
             annotated = annotate_filter_result(row, reasons)
+            tracker.on_row(reasons)
             if reasons:
                 stats["rejected_rows"] += 1
                 _write_jsonl_line(rejected_handle, annotated)
@@ -154,6 +225,15 @@ async def _write_memorization_outputs_async(
 
     common_publish.write_preview(rows_preview, outputs_dir / "memorization_preview.jsonl", n=50)
     common_publish.write_preview(rejected_preview, outputs_dir / "memorization_rejected_preview.jsonl", n=50)
+    tracker.finish()
+    log_event(
+        "pleias_synth",
+        "memorization_completed",
+        worker_concurrency=worker_concurrency,
+        candidate_rows=stats["candidate_rows"],
+        rows=stats["rows"],
+        rejected_rows=stats["rejected_rows"],
+    )
     _progress_log(f"memorization: kept {stats['rows']} rows, rejected {stats['rejected_rows']}")
     return stats
 
@@ -393,10 +473,14 @@ def _progress_log(message: str) -> None:
     print(f"[pleias_synth] {message}", flush=True)
 
 
-def _progress_reporter(label: str) -> Callable[[int, int | None, int], None]:
+def _progress_reporter(
+    label: str,
+    tracker: _MemorizationProgressTracker,
+) -> Callable[[int, int | None, int], None]:
     next_log = {"count": 1}
 
     def report(completed: int, total: int | None, elapsed: int) -> None:
+        tracker.on_progress(completed, total, elapsed)
         total_text = "?" if total is None else str(total)
         if completed == 0:
             _progress_log(f"{label}: 0/{total_text}")

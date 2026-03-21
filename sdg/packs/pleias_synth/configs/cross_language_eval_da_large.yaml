@@ -1,0 +1,62 @@
+pack: pleias_synth
+reuse_completed: false
+models:
+  query_teacher:
+    endpoint: openai
+    max_concurrency: 10
+    max_retries: 8
+    timeout_seconds: 900
+  reasoning_teacher:
+    endpoint: openai
+    max_concurrency: 10
+    max_retries: 8
+    timeout_seconds: 900
+  answer_teacher:
+    endpoint: openai
+    max_concurrency: 10
+    max_retries: 8
+    timeout_seconds: 900
+  judge:
+    endpoint: openai
+    max_concurrency: 10
+    max_retries: 8
+    timeout_seconds: 900
+memory_core:
+  source: wikipedia_vital_articles
+  source_language: en
+  vital_level: 4
+  max_articles: 25
+  expand_with:
+    - structured_wikipedia
+    - wikidata
+  fetch_batch_size: 20
+  request_pause_seconds: 0.05
+  chunk_size: 120
+  chunk_overlap: 30
+generation:
+  families:
+    - memorization
+  max_rows_per_family: 50
+  train_fraction: 0.8
+  memorization:
+    use_llm: true
+    lead_sentences: 10
+    max_sentences_per_doc: 2
+    min_sentence_words: 5
+    max_sentence_words: 110
+    support_sentences: 3
+    structured_facts: 4
+    retrieve_top_k: 5
+    language_plan:
+      prompt: da
+      reasoning: da
+      target: da
+    personas:
+      source: preset
+      preset: starter
+    query_profiles:
+      source: preset
+      preset: starter
+    assistant_style:
+      source: preset
+      preset: starter

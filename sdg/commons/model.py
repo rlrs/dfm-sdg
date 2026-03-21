@@ -14,6 +14,8 @@ from typing import Any, Literal, TypedDict
 import httpx
 from dotenv import dotenv_values, load_dotenv
 
+from sdg.commons.run_log import current_run_log, log_event, write_snapshot
+
 ModelKind = Literal["llm", "embedder", "reranker"]
 
 
@@ -120,6 +122,10 @@ class EndpointRuntime:
                 return
             await asyncio.sleep(delay)
 
+    def snapshot(self) -> tuple[int, float]:
+        with self.lock:
+            return self.in_flight, max(self.next_allowed_at - time.monotonic(), 0.0)
+
     def extend_backoff(self, delay: float) -> None:
         if delay <= 0:
             return
@@ -209,6 +215,7 @@ class EndpointClient:
             endpoint=endpoint,
             payload=payload,
             headers=self._headers(),
+            request_label=self.model,
         )
 
     async def _apost_json(self, endpoint: str, payload: dict[str, Any]) -> dict[str, Any]:
@@ -218,6 +225,7 @@ class EndpointClient:
             endpoint=endpoint,
             payload=payload,
             headers=self._headers(),
+            request_label=self.model,
         )
 
     def _sync_http_client(self) -> httpx.Client:
@@ -496,7 +504,19 @@ def _post_json(
     endpoint: str,
     payload: dict[str, Any],
     headers: dict[str, str],
+    request_label: str,
 ) -> dict[str, Any]:
+    request_id = _next_request_id()
+    started_at = time.monotonic()
+    _record_model_started(request_label, endpoint)
+    _emit_model_event(
+        "request_started",
+        request_id=request_id,
+        request_label=request_label,
+        endpoint=endpoint,
+        attempt=0,
+        runtime=runtime,
+    )
     for attempt in range(runtime.max_retries + 1):
         runtime.wait_sync()
         runtime.acquire_sync()
@@ -506,12 +526,68 @@ def _post_json(
             if response.status_code == 429:
                 delay = runtime.retry_delay(response.headers, attempt=attempt)
                 runtime.extend_backoff(delay)
+                _record_model_retry(request_label, endpoint, response.status_code)
+                _emit_model_event(
+                    "request_retry",
+                    request_id=request_id,
+                    request_label=request_label,
+                    endpoint=endpoint,
+                    attempt=attempt + 1,
+                    delay_seconds=delay,
+                    status_code=response.status_code,
+                    headers=_response_headers(response.headers),
+                    runtime=runtime,
+                )
                 if attempt == runtime.max_retries:
                     response.raise_for_status()
                 continue
             response.raise_for_status()
             runtime.observe_headers(response.headers)
+            duration_ms = _duration_ms(started_at)
+            _record_model_finished(
+                request_label,
+                endpoint,
+                status_code=response.status_code,
+                duration_ms=duration_ms,
+                succeeded=True,
+            )
+            _emit_model_event(
+                "request_finished",
+                request_id=request_id,
+                request_label=request_label,
+                endpoint=endpoint,
+                attempt=attempt + 1,
+                duration_ms=duration_ms,
+                status_code=response.status_code,
+                headers=_response_headers(response.headers),
+                runtime=runtime,
+            )
             return response.json()
+        except Exception as error:
+            if isinstance(error, httpx.HTTPStatusError):
+                status_code = error.response.status_code
+            else:
+                status_code = None
+            _record_model_finished(
+                request_label,
+                endpoint,
+                status_code=status_code,
+                duration_ms=_duration_ms(started_at),
+                succeeded=False,
+            )
+            _emit_model_event(
+                "request_failed",
+                request_id=request_id,
+                request_label=request_label,
+                endpoint=endpoint,
+                attempt=attempt + 1,
+                duration_ms=_duration_ms(started_at),
+                error_type=error.__class__.__name__,
+                error_message=str(error),
+                status_code=status_code,
+                runtime=runtime,
+            )
+            raise
         finally:
             runtime.release()
 
@@ -525,7 +601,19 @@ async def _apost_json(
     endpoint: str,
     payload: dict[str, Any],
     headers: dict[str, str],
+    request_label: str,
 ) -> dict[str, Any]:
+    request_id = _next_request_id()
+    started_at = time.monotonic()
+    _record_model_started(request_label, endpoint)
+    _emit_model_event(
+        "request_started",
+        request_id=request_id,
+        request_label=request_label,
+        endpoint=endpoint,
+        attempt=0,
+        runtime=runtime,
+    )
     for attempt in range(runtime.max_retries + 1):
         await runtime.wait_async()
         await runtime.acquire_async()
@@ -535,12 +623,68 @@ async def _apost_json(
             if response.status_code == 429:
                 delay = runtime.retry_delay(response.headers, attempt=attempt)
                 runtime.extend_backoff(delay)
+                _record_model_retry(request_label, endpoint, response.status_code)
+                _emit_model_event(
+                    "request_retry",
+                    request_id=request_id,
+                    request_label=request_label,
+                    endpoint=endpoint,
+                    attempt=attempt + 1,
+                    delay_seconds=delay,
+                    status_code=response.status_code,
+                    headers=_response_headers(response.headers),
+                    runtime=runtime,
+                )
                 if attempt == runtime.max_retries:
                     response.raise_for_status()
                 continue
             response.raise_for_status()
             runtime.observe_headers(response.headers)
+            duration_ms = _duration_ms(started_at)
+            _record_model_finished(
+                request_label,
+                endpoint,
+                status_code=response.status_code,
+                duration_ms=duration_ms,
+                succeeded=True,
+            )
+            _emit_model_event(
+                "request_finished",
+                request_id=request_id,
+                request_label=request_label,
+                endpoint=endpoint,
+                attempt=attempt + 1,
+                duration_ms=duration_ms,
+                status_code=response.status_code,
+                headers=_response_headers(response.headers),
+                runtime=runtime,
+            )
             return response.json()
+        except Exception as error:
+            if isinstance(error, httpx.HTTPStatusError):
+                status_code = error.response.status_code
+            else:
+                status_code = None
+            _record_model_finished(
+                request_label,
+                endpoint,
+                status_code=status_code,
+                duration_ms=_duration_ms(started_at),
+                succeeded=False,
+            )
+            _emit_model_event(
+                "request_failed",
+                request_id=request_id,
+                request_label=request_label,
+                endpoint=endpoint,
+                attempt=attempt + 1,
+                duration_ms=_duration_ms(started_at),
+                error_type=error.__class__.__name__,
+                error_message=str(error),
+                status_code=status_code,
+                runtime=runtime,
+            )
+            raise
         finally:
             runtime.release()
 
@@ -702,3 +846,209 @@ def _float_value(value: str | None, default: float) -> float:
     if value is None:
         return default
     return float(value)
+
+
+_REQUEST_DEBUG_LOCK = threading.Lock()
+_REQUEST_DEBUG_COUNTER = 0
+_MODEL_METRICS_LOCK = threading.Lock()
+_MODEL_METRICS_SESSION: int | None = None
+_MODEL_METRICS = {
+    "totals": {
+        "requests_started": 0,
+        "requests_succeeded": 0,
+        "requests_failed": 0,
+        "request_retries": 0,
+        "rate_limits": 0,
+        "total_duration_ms": 0,
+        "max_duration_ms": 0,
+    },
+    "targets": {},
+}
+
+
+def _next_request_id() -> int:
+    global _REQUEST_DEBUG_COUNTER
+    with _REQUEST_DEBUG_LOCK:
+        _REQUEST_DEBUG_COUNTER += 1
+        return _REQUEST_DEBUG_COUNTER
+
+
+def _model_debug(message: str) -> None:
+    if os.environ.get("SDG_MODEL_DEBUG") != "1":
+        return
+    print(f"[model] {message}", flush=True)
+
+
+def _emit_model_event(
+    event: str,
+    *,
+    request_id: int,
+    request_label: str,
+    endpoint: str,
+    attempt: int,
+    runtime: EndpointRuntime,
+    **data: Any,
+) -> None:
+    in_flight, backoff = runtime.snapshot()
+    payload = {
+        "request_id": request_id,
+        "model": request_label,
+        "endpoint": endpoint,
+        "attempt": attempt,
+        "in_flight": in_flight,
+        "backoff_seconds": round(backoff, 3),
+        **data,
+    }
+    log_event("model", event, **payload)
+    if os.environ.get("SDG_MODEL_DEBUG") == "1":
+        ordered = " ".join(f"{key}={value}" for key, value in payload.items())
+        _model_debug(f"event={event} {ordered}")
+
+
+def _record_model_started(request_label: str, endpoint: str) -> None:
+    with _MODEL_METRICS_LOCK:
+        if not _ensure_model_metrics_session_locked():
+            return
+        _metrics_target(request_label, endpoint)["requests_started"] += 1
+        _MODEL_METRICS["totals"]["requests_started"] += 1
+        _write_model_metrics_snapshot_locked()
+
+
+def _record_model_retry(request_label: str, endpoint: str, status_code: int | None) -> None:
+    with _MODEL_METRICS_LOCK:
+        if not _ensure_model_metrics_session_locked():
+            return
+        target = _metrics_target(request_label, endpoint)
+        target["request_retries"] += 1
+        _MODEL_METRICS["totals"]["request_retries"] += 1
+        if status_code == 429:
+            target["rate_limits"] += 1
+            _MODEL_METRICS["totals"]["rate_limits"] += 1
+        _write_model_metrics_snapshot_locked()
+
+
+def _record_model_finished(
+    request_label: str,
+    endpoint: str,
+    *,
+    status_code: int | None,
+    duration_ms: int,
+    succeeded: bool,
+) -> None:
+    with _MODEL_METRICS_LOCK:
+        if not _ensure_model_metrics_session_locked():
+            return
+        target = _metrics_target(request_label, endpoint)
+        if succeeded:
+            target["requests_succeeded"] += 1
+            _MODEL_METRICS["totals"]["requests_succeeded"] += 1
+        else:
+            target["requests_failed"] += 1
+            _MODEL_METRICS["totals"]["requests_failed"] += 1
+        target["total_duration_ms"] += duration_ms
+        target["max_duration_ms"] = max(target["max_duration_ms"], duration_ms)
+        target["last_status_code"] = status_code
+        _MODEL_METRICS["totals"]["total_duration_ms"] += duration_ms
+        _MODEL_METRICS["totals"]["max_duration_ms"] = max(
+            _MODEL_METRICS["totals"]["max_duration_ms"],
+            duration_ms,
+        )
+        _write_model_metrics_snapshot_locked()
+
+
+def _metrics_target(request_label: str, endpoint: str) -> dict[str, Any]:
+    key = f"{request_label} {endpoint}"
+    targets = _MODEL_METRICS["targets"]
+    target = targets.get(key)
+    if target is not None:
+        return target
+    target = {
+        "model": request_label,
+        "endpoint": endpoint,
+        "requests_started": 0,
+        "requests_succeeded": 0,
+        "requests_failed": 0,
+        "request_retries": 0,
+        "rate_limits": 0,
+        "total_duration_ms": 0,
+        "max_duration_ms": 0,
+        "last_status_code": None,
+    }
+    targets[key] = target
+    return target
+
+
+def _empty_model_metrics() -> dict[str, Any]:
+    return {
+        "totals": {
+            "requests_started": 0,
+            "requests_succeeded": 0,
+            "requests_failed": 0,
+            "request_retries": 0,
+            "rate_limits": 0,
+            "total_duration_ms": 0,
+            "max_duration_ms": 0,
+        },
+        "targets": {},
+    }
+
+
+def _ensure_model_metrics_session_locked() -> bool:
+    global _MODEL_METRICS, _MODEL_METRICS_SESSION
+    logger = current_run_log()
+    if logger is None:
+        return False
+    session = id(logger)
+    if _MODEL_METRICS_SESSION == session:
+        return True
+    _MODEL_METRICS_SESSION = session
+    _MODEL_METRICS = _empty_model_metrics()
+    return True
+
+
+def _write_model_metrics_snapshot_locked() -> None:
+    totals = dict(_MODEL_METRICS["totals"])
+    targets: dict[str, dict[str, Any]] = {}
+    for key, target in _MODEL_METRICS["targets"].items():
+        targets[key] = {
+            **target,
+            "avg_duration_ms": _average_duration(
+                target["total_duration_ms"],
+                target["requests_succeeded"] + target["requests_failed"],
+            ),
+        }
+    snapshot = {
+        "totals": {
+            **totals,
+            "avg_duration_ms": _average_duration(
+                totals["total_duration_ms"],
+                totals["requests_succeeded"] + totals["requests_failed"],
+            ),
+        },
+        "targets": targets,
+    }
+    write_snapshot("model_metrics.json", snapshot, min_interval_seconds=1.0)
+
+
+def _average_duration(total_duration_ms: int, completed_requests: int) -> float:
+    if completed_requests == 0:
+        return 0.0
+    return round(total_duration_ms / completed_requests, 2)
+
+
+def _duration_ms(started_at: float) -> int:
+    return int((time.monotonic() - started_at) * 1000)
+
+
+def _response_headers(headers: httpx.Headers) -> dict[str, str | None]:
+    return {
+        "retry_after": _first_header(headers, ["retry-after-ms", "retry-after"]),
+        "remaining_requests": _first_header(
+            headers,
+            ["x-ratelimit-remaining-requests", "ratelimit-remaining-requests"],
+        ),
+        "reset_requests": _first_header(
+            headers,
+            ["x-ratelimit-reset-requests", "ratelimit-reset-requests"],
+        ),
+    }

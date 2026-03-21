@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import threading
 import time
 
@@ -15,6 +16,7 @@ from sdg.commons.model import (
     load_endpoints,
     resolve_client,
 )
+from sdg.commons.run_log import activate_run_log
 
 
 def test_named_endpoints_support_multiple_models(tmp_path) -> None:
@@ -294,3 +296,55 @@ def test_async_chat_reuses_httpx_client(monkeypatch) -> None:
 
     asyncio.run(run_requests())
     assert created["count"] == 1
+
+
+def test_model_logging_writes_metrics_and_events(tmp_path) -> None:
+    calls = {"count": 0}
+
+    class RetryTransport(httpx.BaseTransport):
+        def handle_request(self, request: httpx.Request) -> httpx.Response:
+            calls["count"] += 1
+            if calls["count"] == 1:
+                return httpx.Response(
+                    429,
+                    headers={"retry-after-ms": "0"},
+                    json={"error": "rate limited"},
+                    request=request,
+                )
+            return httpx.Response(
+                200,
+                json={"choices": [{"message": {"content": '{"target":"ok"}'}}]},
+                request=request,
+            )
+
+    run_dir = tmp_path / "run"
+    run_dir.mkdir(parents=True)
+    llm = LLM(
+        model="test-model",
+        base_url="https://example.com/v1",
+        max_retries=1,
+        transport=RetryTransport(),
+    )
+
+    with activate_run_log(run_dir):
+        content = llm.chat([{"role": "user", "content": "hello"}], temperature=0.0)
+
+    assert content == '{"target":"ok"}'
+
+    metrics = json.loads((run_dir / "outputs" / "model_metrics.json").read_text())
+    assert metrics["totals"]["requests_started"] == 1
+    assert metrics["totals"]["requests_succeeded"] == 1
+    assert metrics["totals"]["requests_failed"] == 0
+    assert metrics["totals"]["request_retries"] == 1
+    assert metrics["totals"]["rate_limits"] == 1
+    assert metrics["targets"]["test-model /chat/completions"]["last_status_code"] == 200
+
+    events = [
+        json.loads(line)
+        for line in (run_dir / "logs" / "events.jsonl").read_text().splitlines()
+        if line.strip()
+    ]
+    event_names = [row["event"] for row in events if row["component"] == "model"]
+    assert "request_started" in event_names
+    assert "request_retry" in event_names
+    assert "request_finished" in event_names
