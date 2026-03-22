@@ -6,6 +6,7 @@ from sdg.commons import store
 from sdg.commons.run import Artifact
 from sdg.commons.viewer import (
     _build_jsonl_offsets,
+    _default_artifact_name,
     _discover_live_artifacts,
     _resolve_artifact_view,
     _slice_jsonl_rows_with_offsets,
@@ -57,3 +58,18 @@ def test_viewer_item_has_stable_item_and_section_keys() -> None:
 
     assert item["key"] == "row-7"
     assert [section["key"] for section in item["sections"]] == ["prompt", "reasoning", "target"]
+
+
+def test_default_artifact_name_prefers_pack_viewer_order() -> None:
+    artifacts = {
+        "dataset": Artifact(name="dataset", path="/tmp/dataset.jsonl", kind="jsonl", meta={}),
+        "memory_chunks": Artifact(name="memory_chunks", path="/tmp/memory_chunks.jsonl", kind="jsonl", meta={}),
+    }
+    spec = {
+        "artifacts": {
+            "memory_chunks": {"label": "Chunks"},
+            "dataset": {"label": "Rows"},
+        }
+    }
+
+    assert _default_artifact_name(spec, artifacts) == "memory_chunks"

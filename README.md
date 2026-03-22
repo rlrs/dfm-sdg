@@ -40,6 +40,32 @@ uv run sdg verify <run-id>
 uv run sdg serve <run-id> --open
 ```
 
+## Adding a pack
+
+Packs live under `sdg/packs/<name>`.
+
+Start by copying the shape of `sdg/packs/demo`:
+
+- add `pack.yaml` with `build`, `verify`, `summarize`, and `publish` entrypoints
+- add one config under `configs/` so the pack is runnable from the CLI
+- keep pack-specific logic inside `sdg.packs.<name>.*` modules and call into `sdg.commons.*` only for shared concerns like runs, storage, publishing, model clients, and viewer helpers
+- add a `README.md` that explains the pack's scope and current status
+- add a `viewer` entrypoint only if the default viewer needs pack-specific labels, sections, filters, or a default artifact
+
+Minimal `pack.yaml`:
+
+```yaml
+name: my_pack
+description: Short pack description.
+entrypoints:
+  build: sdg.packs.my_pack.build:build
+  verify: sdg.packs.my_pack.build:verify
+  summarize: sdg.packs.my_pack.build:summarize
+  publish: sdg.packs.my_pack.build:publish
+```
+
+Then add a test like `tests/test_demo_pack.py` that exercises build, verify, summarize, publish, and view for the new pack.
+
 ## Models
 
 Model-backed steps load named endpoints from `.env`.

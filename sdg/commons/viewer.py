@@ -183,9 +183,11 @@ def _default_artifact_name(spec: dict[str, Any], artifacts: dict[str, Artifact])
     if preferred and preferred in artifacts:
         return preferred
 
-    for name in ("grounded_qa_rows", "memorization_rows", "dataset"):
-        if name in artifacts:
-            return name
+    configured_artifacts = spec.get("artifacts", {})
+    if isinstance(configured_artifacts, dict):
+        for name in configured_artifacts:
+            if name in artifacts:
+                return name
 
     return next(iter(artifacts))
 
