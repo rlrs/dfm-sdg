@@ -73,3 +73,17 @@ def test_map_async_unordered_yields_completed_results_immediately() -> None:
         return rows
 
     assert asyncio.run(run()) == [10, 0]
+
+
+def test_map_async_unordered_raises_when_worker_is_cancelled() -> None:
+    async def run() -> None:
+        async def worker(index: int, item: int) -> int:
+            if item == 1:
+                raise asyncio.CancelledError()
+            return item
+
+        async for _ in map_async_unordered([0, 1, 2], worker, concurrency=2):
+            pass
+
+    with pytest.raises(RuntimeError, match="cancelled unexpectedly"):
+        asyncio.run(run())

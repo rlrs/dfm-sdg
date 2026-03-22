@@ -6,6 +6,7 @@ import threading
 import time
 
 import httpx
+import pytest
 
 import sdg.commons.model as model_module
 from sdg.commons.model import (
@@ -348,3 +349,38 @@ def test_model_logging_writes_metrics_and_events(tmp_path) -> None:
     assert "request_started" in event_names
     assert "request_retry" in event_names
     assert "request_finished" in event_names
+
+
+def test_async_model_logging_records_cancelled_requests(tmp_path) -> None:
+    class CancelledAsyncTransport(httpx.AsyncBaseTransport):
+        async def handle_async_request(self, request: httpx.Request) -> httpx.Response:
+            raise asyncio.CancelledError()
+
+    run_dir = tmp_path / "run"
+    run_dir.mkdir(parents=True)
+    llm = LLM(
+        model="test-model",
+        base_url="https://example.com/v1",
+        async_transport=CancelledAsyncTransport(),
+    )
+
+    async def run_request() -> None:
+        with activate_run_log(run_dir):
+            await llm.achat([{"role": "user", "content": "hello"}], temperature=0.0)
+
+    with pytest.raises(asyncio.CancelledError):
+        asyncio.run(run_request())
+
+    metrics = json.loads((run_dir / "outputs" / "model_metrics.json").read_text())
+    assert metrics["totals"]["requests_started"] == 1
+    assert metrics["totals"]["requests_succeeded"] == 0
+    assert metrics["totals"]["requests_failed"] == 1
+
+    events = [
+        json.loads(line)
+        for line in (run_dir / "logs" / "events.jsonl").read_text().splitlines()
+        if line.strip()
+    ]
+    event_names = [row["event"] for row in events if row["component"] == "model"]
+    assert "request_started" in event_names
+    assert "request_cancelled" in event_names

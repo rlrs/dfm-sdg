@@ -615,9 +615,11 @@ async def _apost_json(
         runtime=runtime,
     )
     for attempt in range(runtime.max_retries + 1):
-        await runtime.wait_async()
-        await runtime.acquire_async()
+        acquired = False
         try:
+            await runtime.wait_async()
+            await runtime.acquire_async()
+            acquired = True
             await runtime.wait_async()
             response = await client.post(endpoint, json=payload, headers=headers)
             if response.status_code == 429:
@@ -658,8 +660,28 @@ async def _apost_json(
                 status_code=response.status_code,
                 headers=_response_headers(response.headers),
                 runtime=runtime,
-            )
+                )
             return response.json()
+        except asyncio.CancelledError as error:
+            _record_model_finished(
+                request_label,
+                endpoint,
+                status_code=None,
+                duration_ms=_duration_ms(started_at),
+                succeeded=False,
+            )
+            _emit_model_event(
+                "request_cancelled",
+                request_id=request_id,
+                request_label=request_label,
+                endpoint=endpoint,
+                attempt=attempt + 1,
+                duration_ms=_duration_ms(started_at),
+                error_type=error.__class__.__name__,
+                error_message=str(error),
+                runtime=runtime,
+            )
+            raise
         except Exception as error:
             if isinstance(error, httpx.HTTPStatusError):
                 status_code = error.response.status_code
@@ -686,7 +708,8 @@ async def _apost_json(
             )
             raise
         finally:
-            runtime.release()
+            if acquired:
+                runtime.release()
 
     raise RuntimeError("Unreachable")
 

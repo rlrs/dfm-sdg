@@ -113,7 +113,24 @@ async def _map_async(
 
     try:
         while finished_workers < worker_count:
-            message = await completed.get()
+            wait_for_completed = asyncio.create_task(completed.get())
+            done, _ = await asyncio.wait(
+                {wait_for_completed, *workers},
+                return_when=asyncio.FIRST_COMPLETED,
+            )
+
+            worker_error = _unexpected_worker_error(workers, done)
+            if worker_error is not None:
+                wait_for_completed.cancel()
+                await asyncio.gather(wait_for_completed, return_exceptions=True)
+                raise worker_error
+
+            if wait_for_completed not in done:
+                wait_for_completed.cancel()
+                await asyncio.gather(wait_for_completed, return_exceptions=True)
+                continue
+
+            message = wait_for_completed.result()
             match message:
                 case _WorkResult(index=index, value=value):
                     if not ordered:
@@ -208,3 +225,18 @@ def _producer_total(producer: asyncio.Task[int], known_total: int | None) -> int
     if not producer.done() or producer.cancelled():
         return None
     return producer.result()
+
+
+def _unexpected_worker_error(
+    workers: list[asyncio.Task[None]],
+    done: set[asyncio.Task[object]],
+) -> Exception | None:
+    for worker in workers:
+        if worker not in done:
+            continue
+        if worker.cancelled():
+            return RuntimeError("Work queue worker was cancelled unexpectedly")
+        error = worker.exception()
+        if error is not None:
+            return error
+    return None
