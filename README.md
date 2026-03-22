@@ -1,41 +1,54 @@
 # dfm-sdg
 
-This repository is bootstrapping a thin SDG commons plus method packs.
+`dfm-sdg` is a small framework for synthetic data generation.
 
-Current Phase 0 scope:
+It keeps the shared layer thin and puts method-specific logic in packs.
 
-- `sdg.commons.*` provides run tracking, artifact IO, publishing helpers, model adapters, and pack discovery.
-- `sdg.packs.demo` is a small arithmetic pack that proves the contract end to end.
-- `sdg.packs.synth` now has a real memory-core setup path for Wikipedia Vital Articles plus structured Wikipedia and Wikidata enrichment, with an initial memorization/retrieval generator on top.
-- model endpoints are now loaded by the commons from `.env` as named reusable endpoints, so one step can bind several models against the same or different backends.
-- `sdg` CLI exposes `build`, `verify`, `summarize`, `publish`, `compare`, and `list-packs`.
+## What is here
 
-Example commands:
+- `sdg.commons.*` handles runs, artifacts, model endpoints, verification helpers, publishing helpers, and pack discovery.
+- `sdg.packs.demo` is a tiny arithmetic pack that exercises the full build and verify flow.
+- `sdg.packs.synth` is the main research pack. It currently supports memory-core building from Wikipedia-style sources, memorization generation, grounded QA generation, verification, publication, and run viewing.
+- `sdg` is the CLI entrypoint.
+
+## Current CLI
+
+The CLI currently exposes:
+
+- `build`
+- `verify`
+- `summarize`
+- `publish`
+- `compare`
+- `events`
+- `progress`
+- `view`
+- `serve`
+- `list-packs`
+
+## Quick start
+
+This project targets Python 3.13 and uses `uv`.
 
 ```bash
+uv sync --dev
 uv run sdg list-packs
 uv run sdg build sdg/packs/demo/configs/base.yaml
-uv run sdg verify <run-id>
-uv run sdg publish <run-id>
-uv run sdg build sdg/packs/synth/configs/base.yaml
 uv run sdg build sdg/packs/synth/configs/smoke.yaml
+uv run sdg summarize <run-id>
+uv run sdg verify <run-id>
+uv run sdg serve <run-id> --open
 ```
 
-For model-backed generation steps, define named endpoints in `.env` and bind pack roles to them in config.
+## Models
 
-Development checks:
+Model-backed steps load named endpoints from `.env`.
+
+Use pack configs to bind model roles to those named endpoints.
+
+## Development
 
 ```bash
 uv run ruff check .
 uv run pytest
 ```
-
-The project now targets Python 3.13.
-
-Ruff stays intentionally moderate here and checks:
-
-- import and syntax issues
-- import ordering
-- simple Python modernizations
-- a small set of bug-prone patterns
-- a few low-friction cleanup and correctness checks
