@@ -16,3 +16,6 @@ wheels/
 # Generated framework outputs
 artifacts/
 reports/
+
+# Local planning notes
+sdg_framework_development_plan.md
