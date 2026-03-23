@@ -21,7 +21,12 @@ from sdg.packs.synth.grounded_qa_filters import (
     parse_cited_statements,
     row_filter_reasons,
 )
-from sdg.packs.synth.languages import LanguagePlan, language_name, load_language_plan
+from sdg.packs.synth.languages import (
+    LanguagePlan,
+    language_name,
+    load_language_plan,
+    row_uses_cross_language,
+)
 from sdg.packs.synth.llm_json import achat_json
 from sdg.packs.synth.memorization_text import (
     as_list,
@@ -44,7 +49,6 @@ class GroundedQASettings(TypedDict):
     min_sources: int
     bridge_sources: int
     retrieve_top_k: int
-    use_llm: bool
     language_plan: LanguagePlan
 
 
@@ -484,7 +488,6 @@ async def _make_row_async(
             "query_angle": plan["query_angle"],
             "task_type": task_plan["task_type"],
             "user_goal": task_plan["user_goal"],
-            "language_mode": language_plan["kind"],
             "source_language": language_plan["source"],
             "prompt_language": language_plan["prompt"],
             "reasoning_language": language_plan["reasoning"],
@@ -763,7 +766,7 @@ def retrieve_support_row(
     settings: GroundedQASettings,
 ) -> dict[str, Any]:
     query_text = row["prompt"]
-    if row["meta"].get("language_mode") == "cross_language":
+    if row_uses_cross_language(row):
         query_text = _source_support_query(row)
 
     query_tokens = set(tokenize(query_text))
@@ -1179,7 +1182,7 @@ def _judge_messages(row: dict[str, Any], diagnostics: dict[str, Any]) -> list[di
 
 
 def _parse_judge(row: dict[str, Any], parsed: dict[str, Any]) -> dict[str, Any]:
-    if row["meta"].get("language_mode") == "cross_language":
+    if row_uses_cross_language(row):
         assert "language_match" in parsed, "judge language_match must be present for cross-language rows"
         assert "language_natural" in parsed, "judge language_natural must be present for cross-language rows"
     language_quality = bool(parsed.get("language_match", True)) and bool(parsed.get("language_natural", True))
@@ -1434,10 +1437,6 @@ def _source_claim(text: str) -> str:
 
 
 def _load_grounded_qa_models(cfg: dict[str, Any]) -> dict[str, LLM]:
-    settings = _grounded_qa_settings(cfg)
-    if not settings["use_llm"]:
-        raise ValueError("grounded_qa generation requires LLM-backed models")
-
     model_refs = cfg.get("models", {})
     required_roles = ["query_teacher", "answer_teacher", "judge"]
     missing = [role for role in required_roles if role not in model_refs]
@@ -1480,7 +1479,6 @@ def _grounded_qa_settings(cfg: dict[str, Any]) -> GroundedQASettings:
         "min_sources": _positive_int(family_cfg, "min_sources", default=2),
         "bridge_sources": _positive_int(family_cfg, "bridge_sources", default=3),
         "retrieve_top_k": retrieve_top_k,
-        "use_llm": _bool_value(family_cfg, "use_llm", default=True),
         "language_plan": load_language_plan(cfg, family="grounded_qa"),
     }
 
@@ -1492,10 +1490,3 @@ def _positive_int(record: dict[str, Any], key: str, *, default: int) -> int:
     assert isinstance(value, int) and value > 0, f"{key} must be a positive integer"
     return value
 
-
-def _bool_value(record: dict[str, Any], key: str, *, default: bool) -> bool:
-    value = record.get(key)
-    if value is None:
-        return default
-    assert isinstance(value, bool), f"{key} must be a boolean"
-    return value

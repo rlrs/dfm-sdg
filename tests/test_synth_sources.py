@@ -147,3 +147,16 @@ def test_load_sources_assigns_source_language_to_path_docs(tmp_path) -> None:
     )
 
     assert docs[0]["meta"]["language"] == "da"
+
+
+def test_wikipedia_source_config_keeps_expand_with_as_data() -> None:
+    config = sources._wikipedia_source_config(
+        {
+            "source_language": "en",
+            "expand_with": ["structured_wikipedia", "wikidata"],
+        }
+    )
+
+    assert config["expand_with"] == frozenset({"structured_wikipedia", "wikidata"})
+    assert "with_structured_wikipedia" not in config
+    assert "with_wikidata" not in config

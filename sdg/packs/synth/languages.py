@@ -5,6 +5,7 @@ from typing import Literal, TypedDict, cast
 from sdg.packs.synth.types import Record
 
 LanguageCode = Literal["en", "da"]
+LanguageMode = Literal["same_language", "cross_language"]
 
 LANGUAGE_NAMES: dict[LanguageCode, str] = {
     "en": "English",
@@ -73,19 +74,49 @@ def load_language_plan(cfg: Record, *, family: str = "memorization") -> Language
     reasoning = _required_language(raw_plan, "reasoning", label=f"{family} language_plan reasoning")
     target = _required_language(raw_plan, "target", label=f"{family} language_plan target")
 
-    kind: Literal["same_language", "cross_language"]
-    if prompt == source and reasoning == source and target == source:
-        kind = "same_language"
-    else:
-        kind = "cross_language"
-
     return {
-        "kind": kind,
+        "kind": language_mode(source, prompt, reasoning, target),
         "source": source,
         "prompt": prompt,
         "reasoning": reasoning,
         "target": target,
     }
+
+
+def language_mode(
+    source: LanguageCode,
+    prompt: LanguageCode,
+    reasoning: LanguageCode,
+    target: LanguageCode,
+) -> LanguageMode:
+    if prompt == source and reasoning == source and target == source:
+        return "same_language"
+    return "cross_language"
+
+
+def row_language_mode(row: Record) -> LanguageMode:
+    meta = row.get("meta")
+    assert isinstance(meta, dict), "row meta must be a mapping"
+
+    source = _row_language_code(meta, "source_language")
+    prompt = _row_language_code(meta, "prompt_language")
+    reasoning = _row_language_code(meta, "reasoning_language")
+    target = _row_language_code(meta, "target_language")
+    if source is not None and prompt is not None and reasoning is not None and target is not None:
+        return language_mode(source, prompt, reasoning, target)
+
+    legacy_mode = meta.get("language_mode")
+    if legacy_mode is not None:
+        assert legacy_mode in {"same_language", "cross_language"}, "row meta language_mode must be supported"
+        return cast(LanguageMode, legacy_mode)
+
+    raise AssertionError(
+        "row meta must define source_language, prompt_language, reasoning_language, and target_language"
+    )
+
+
+def row_uses_cross_language(row: Record) -> bool:
+    return row_language_mode(row) == "cross_language"
 
 
 def _required_language(record: Record, key: str, *, label: str) -> LanguageCode:
@@ -98,3 +129,10 @@ def _language_code(value: object, *, label: str) -> LanguageCode:
     assert isinstance(value, str) and value, f"{label} must be a non-empty string"
     assert value in LANGUAGE_NAMES, f"Unsupported {label}: {value}"
     return cast(LanguageCode, value)
+
+
+def _row_language_code(meta: Record, key: str) -> LanguageCode | None:
+    value = meta.get(key)
+    if value is None:
+        return None
+    return _language_code(value, label=f"row meta {key}")

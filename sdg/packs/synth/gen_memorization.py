@@ -13,7 +13,12 @@ from sdg.commons import publish as common_publish
 from sdg.commons.model import LLM, load_clients
 from sdg.commons.run_log import log_event, write_snapshot
 from sdg.commons.work_queue import map_async_unordered
-from sdg.packs.synth.languages import LanguagePlan, language_name, load_language_plan
+from sdg.packs.synth.languages import (
+    LanguagePlan,
+    language_name,
+    load_language_plan,
+    row_uses_cross_language,
+)
 from sdg.packs.synth.llm_json import achat_json
 from sdg.packs.synth.memorization_filters import (
     annotate_filter_result,
@@ -42,7 +47,6 @@ class MemorizationSettings(TypedDict):
     retrieve_top_k: int
     planning_retrieve_top_k: int
     planning_claims: int
-    use_llm: bool
     language_plan: LanguagePlan
 
 
@@ -424,7 +428,7 @@ def retrieve_support_row(
     settings: MemorizationSettings,
 ) -> dict[str, Any]:
     query_text = row["prompt"]
-    if row["meta"].get("language_mode") == "cross_language":
+    if row_uses_cross_language(row):
         query_text = _source_support_query(row)
 
     query_tokens = set(tokenize(query_text))
@@ -779,7 +783,6 @@ async def _make_row_async(
             "query_angle": query_angle,
             "task_type": task_plan["task_type"],
             "user_goal": task_plan["user_goal"],
-            "language_mode": language_plan["kind"],
             "source_language": language_plan["source"],
             "prompt_language": language_plan["prompt"],
             "reasoning_language": language_plan["reasoning"],
@@ -1426,7 +1429,7 @@ def _judge_messages(row: dict[str, Any]) -> list[dict[str, str]]:
 
 
 def _parse_judge(row: dict[str, Any], parsed: dict[str, Any]) -> dict[str, Any]:
-    if row["meta"].get("language_mode") == "cross_language":
+    if row_uses_cross_language(row):
         assert "language_match" in parsed, "judge language_match must be present for cross-language rows"
         assert "language_natural" in parsed, "judge language_natural must be present for cross-language rows"
     language_quality = bool(parsed.get("language_match", True)) and bool(parsed.get("language_natural", True))
@@ -1538,10 +1541,6 @@ def _structured_facts(doc: dict[str, Any], *, limit: int) -> list[str]:
 
 
 def _load_memorization_models(cfg: dict[str, Any]) -> dict[str, LLM]:
-    settings = _memorization_settings(cfg)
-    if not settings["use_llm"]:
-        raise ValueError("memorization generation requires LLM-backed models")
-
     model_refs = cfg.get("models", {})
     required_roles = ["query_teacher", "answer_teacher", "judge"]
     missing = [role for role in required_roles if role not in model_refs]
@@ -1588,7 +1587,6 @@ def _memorization_settings(cfg: dict[str, Any]) -> MemorizationSettings:
             default=retrieve_top_k,
         ),
         "planning_claims": _positive_int(memorization_cfg, "planning_claims", default=6),
-        "use_llm": _bool_value(memorization_cfg, "use_llm", default=True),
         "language_plan": load_language_plan(cfg),
     }
 
@@ -1600,10 +1598,3 @@ def _positive_int(record: dict[str, Any], key: str, *, default: int) -> int:
     assert isinstance(value, int) and value > 0, f"{key} must be a positive integer"
     return value
 
-
-def _bool_value(record: dict[str, Any], key: str, *, default: bool) -> bool:
-    value = record.get(key)
-    if value is None:
-        return default
-    assert isinstance(value, bool), f"{key} must be a boolean"
-    return value

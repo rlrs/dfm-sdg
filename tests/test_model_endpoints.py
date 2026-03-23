@@ -80,6 +80,69 @@ def test_legacy_openai_env_still_resolves(tmp_path) -> None:
     assert client.model == "gpt-4.1-mini"
 
 
+def test_direct_model_ref_resolves_without_endpoint_alias() -> None:
+    client = resolve_client(
+        {
+            "model": "gpt-4.1-mini",
+            "base_url": "https://example.com/v1",
+        },
+        role="query_teacher",
+    )
+
+    assert isinstance(client, LLM)
+    assert client.model == "gpt-4.1-mini"
+    assert client.base_url == "https://example.com/v1"
+    assert client.api_key_env == "OPENAI_API_KEY"
+
+
+def test_direct_model_ref_preserves_explicit_null_api_key_env() -> None:
+    client = resolve_client(
+        {
+            "model": "gpt-4.1-mini",
+            "base_url": "https://example.com/v1",
+            "api_key_env": None,
+        },
+        role="query_teacher",
+    )
+
+    assert isinstance(client, LLM)
+    assert client.api_key_env is None
+
+
+def test_endpoint_model_ref_rejects_direct_only_keys(tmp_path) -> None:
+    env_path = tmp_path / ".env"
+    env_path.write_text(
+        "\n".join(
+            [
+                "SDG_ENDPOINT__OPENAI__BASE_URL=https://api.openai.com/v1",
+                "SDG_ENDPOINT__OPENAI__DEFAULT_MODEL=gpt-4.1-mini",
+            ]
+        )
+    )
+
+    with pytest.raises(AssertionError, match="unsupported keys: base_url"):
+        resolve_client(
+            {
+                "endpoint": "openai",
+                "base_url": "https://example.com/v1",
+            },
+            role="query_teacher",
+            env_path=env_path,
+        )
+
+
+def test_direct_model_ref_rejects_unknown_keys() -> None:
+    with pytest.raises(AssertionError, match="unsupported keys: timeout"):
+        resolve_client(
+            {
+                "model": "gpt-4.1-mini",
+                "base_url": "https://example.com/v1",
+                "timeout": 30,
+            },
+            role="query_teacher",
+        )
+
+
 def test_sync_chat_retries_after_rate_limit() -> None:
     calls = {"count": 0}
 

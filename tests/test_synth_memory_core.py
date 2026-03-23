@@ -18,6 +18,7 @@ from sdg.packs.synth.grounded_qa_filters import (
     parse_cited_statements,
     row_filter_reasons,
 )
+from sdg.packs.synth.languages import row_language_mode
 from sdg.packs.synth.verify import (
     _answer_supported,
     _coverage_supported,
@@ -225,7 +226,6 @@ def test_synth_memory_core_flow(tmp_path, monkeypatch) -> None:
             "max_rows_per_family": 4,
             "train_fraction": 0.75,
             "memorization": {
-                "use_llm": True,
                 "lead_sentences": 2,
                 "max_sentences_per_doc": 1,
                 "retrieve_top_k": 3,
@@ -306,7 +306,8 @@ def test_synth_memory_core_flow(tmp_path, monkeypatch) -> None:
     assert "assistant_style_id" in train_rows[0]["meta"]
     assert "task_type" in train_rows[0]["meta"]
     assert "user_goal" in train_rows[0]["meta"]
-    assert train_rows[0]["meta"]["language_mode"] == "same_language"
+    assert "language_mode" not in train_rows[0]["meta"]
+    assert row_language_mode(train_rows[0]) == "same_language"
     assert train_rows[0]["meta"]["source_language"] == "en"
     assert train_rows[0]["meta"]["prompt_language"] == "en"
     assert train_rows[0]["meta"]["reasoning_language"] == "en"
@@ -387,7 +388,6 @@ def test_synth_grounded_qa_flow(tmp_path, monkeypatch) -> None:
             "max_rows_per_family": 4,
             "train_fraction": 0.75,
             "grounded_qa": {
-                "use_llm": True,
                 "lead_sentences": 2,
                 "max_sentences_per_doc": 1,
                 "min_sources": 2,
@@ -685,9 +685,7 @@ def test_generation_error_short_circuits_grounded_qa_filter_reasons() -> None:
         "target": "",
         "reasoning": "",
         "sources": [],
-        "meta": {
-            "language_mode": "cross_language",
-        },
+        "meta": {},
         "hidden": {
             "generation_error": "grounded_qa target retry budget exhausted",
         },
@@ -784,7 +782,10 @@ def test_retrieve_support_row_keeps_seed_and_bridge_sources_first() -> None:
             },
         },
         "meta": {
-            "language_mode": "same_language",
+            "source_language": "en",
+            "prompt_language": "en",
+            "reasoning_language": "en",
+            "target_language": "en",
         },
     }
     index = {
@@ -869,7 +870,13 @@ def test_parse_backreasoning_requires_source_plan() -> None:
 def test_answer_supported_accepts_full_response() -> None:
     row = {
         "target": "The film follows a voyage to Jupiter to investigate an alien monolith.",
-        "meta": {"question_type": "definition"},
+        "meta": {
+            "question_type": "definition",
+            "source_language": "en",
+            "prompt_language": "en",
+            "reasoning_language": "en",
+            "target_language": "en",
+        },
         "hidden": {
             "sentence": "2001: A Space Odyssey is a 1968 epic science fiction film.",
             "source_title": "2001: A Space Odyssey",
@@ -890,7 +897,13 @@ def test_answer_supported_accepts_full_response() -> None:
 def test_answer_supported_rejects_unsupported_response() -> None:
     row = {
         "target": "The film is mainly a courtroom drama about corporate fraud on Earth.",
-        "meta": {"question_type": "definition"},
+        "meta": {
+            "question_type": "definition",
+            "source_language": "en",
+            "prompt_language": "en",
+            "reasoning_language": "en",
+            "target_language": "en",
+        },
         "hidden": {
             "sentence": "2001: A Space Odyssey is a 1968 epic science fiction film.",
             "source_title": "2001: A Space Odyssey",
@@ -913,7 +926,10 @@ def test_answer_supported_uses_hidden_source_target_for_cross_language_rows() ->
         "target": "Filmen handler om noget helt andet.",
         "meta": {
             "question_type": "definition",
-            "language_mode": "cross_language",
+            "source_language": "en",
+            "prompt_language": "da",
+            "reasoning_language": "da",
+            "target_language": "da",
         },
         "hidden": {
             "sentence": "2001: A Space Odyssey is a 1968 epic science fiction film.",
@@ -945,7 +961,10 @@ def test_reasoning_grounded_uses_hidden_source_reasoning_for_cross_language_rows
         "reasoning": "Det bygger på de huskede fakta om rejsen mod Jupiter.",
         "meta": {
             "question_type": "definition",
-            "language_mode": "cross_language",
+            "source_language": "en",
+            "prompt_language": "da",
+            "reasoning_language": "da",
+            "target_language": "da",
         },
         "hidden": {
             "sentence": "2001: A Space Odyssey is a 1968 epic science fiction film.",
@@ -1056,7 +1075,10 @@ def test_answer_supported_requires_hidden_source_target_for_cross_language_rows(
         "target": "Det er et svar.",
         "meta": {
             "question_type": "definition",
-            "language_mode": "cross_language",
+            "source_language": "en",
+            "prompt_language": "da",
+            "reasoning_language": "da",
+            "target_language": "da",
         },
         "hidden": {
             "sentence": "2001: A Space Odyssey is a 1968 epic science fiction film.",
@@ -1084,7 +1106,10 @@ def test_answer_supported_requires_hidden_source_target_for_cross_language_rows(
 def test_parse_judge_requires_language_checks_for_cross_language_rows() -> None:
     row = {
         "meta": {
-            "language_mode": "cross_language",
+            "source_language": "en",
+            "prompt_language": "da",
+            "reasoning_language": "da",
+            "target_language": "da",
         }
     }
     parsed = {
@@ -1129,7 +1154,10 @@ def test_grounded_qa_verify_uses_judge_for_citation_supported() -> None:
 def test_parse_judge_derives_language_quality_from_explicit_checks() -> None:
     row = {
         "meta": {
-            "language_mode": "cross_language",
+            "source_language": "en",
+            "prompt_language": "da",
+            "reasoning_language": "da",
+            "target_language": "da",
         }
     }
     parsed = {
@@ -1240,7 +1268,6 @@ def test_build_resumes_failed_memorization_run(tmp_path, monkeypatch) -> None:
             "max_rows_per_family": 3,
             "train_fraction": 0.75,
             "memorization": {
-                "use_llm": True,
                 "lead_sentences": 2,
                 "max_sentences_per_doc": 1,
                 "retrieve_top_k": 3,

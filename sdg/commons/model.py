@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from email.utils import parsedate_to_datetime
 from pathlib import Path
-from typing import Any, Literal, TypedDict
+from typing import Any, Literal, NotRequired, TypeGuard, TypedDict
 
 import httpx
 from dotenv import dotenv_values, load_dotenv
@@ -19,34 +19,34 @@ from sdg.commons.run_log import current_run_log, log_event, write_snapshot
 ModelKind = Literal["llm", "embedder", "reranker"]
 
 
-class EndpointBackedModelRef(TypedDict, total=False):
+class EndpointModelRef(TypedDict):
     endpoint: str
-    type: ModelKind
+    type: NotRequired[ModelKind]
+    model: NotRequired[str]
+    api_key: NotRequired[str]
+    api_key_env: NotRequired[str | None]
+    max_concurrency: NotRequired[int]
+    max_retries: NotRequired[int]
+    min_backoff_seconds: NotRequired[float]
+    max_backoff_seconds: NotRequired[float]
+    timeout_seconds: NotRequired[float]
+
+
+class DirectModelRef(TypedDict):
     model: str
     base_url: str
-    api_key: str
-    api_key_env: str | None
-    max_concurrency: int
-    max_retries: int
-    min_backoff_seconds: float
-    max_backoff_seconds: float
-    timeout_seconds: float
+    type: NotRequired[ModelKind]
+    api_key: NotRequired[str]
+    api_key_env: NotRequired[str | None]
+    max_concurrency: NotRequired[int]
+    max_retries: NotRequired[int]
+    min_backoff_seconds: NotRequired[float]
+    max_backoff_seconds: NotRequired[float]
+    timeout_seconds: NotRequired[float]
 
 
-class DirectModelRef(TypedDict, total=False):
-    type: ModelKind
-    model: str
-    base_url: str
-    api_key: str
-    api_key_env: str | None
-    max_concurrency: int
-    max_retries: int
-    min_backoff_seconds: float
-    max_backoff_seconds: float
-    timeout_seconds: float
-
-
-class ClientSpec(TypedDict):
+@dataclass(frozen=True)
+class ClientSpec:
     type: ModelKind
     model: str
     base_url: str
@@ -59,7 +59,7 @@ class ClientSpec(TypedDict):
     timeout_seconds: float
 
 
-ModelRef = str | EndpointBackedModelRef | DirectModelRef
+ModelRef = str | EndpointModelRef | DirectModelRef
 
 
 @dataclass(frozen=True)
@@ -388,18 +388,18 @@ def resolve_client(
 
 def build_client(spec: ClientSpec) -> LLM | Embedder | Reranker:
     common = {
-        "model": spec["model"],
-        "base_url": spec["base_url"],
-        "api_key_env": spec["api_key_env"],
-        "api_key": spec["api_key"],
-        "max_concurrency": spec["max_concurrency"],
-        "max_retries": spec["max_retries"],
-        "min_backoff_seconds": spec["min_backoff_seconds"],
-        "max_backoff_seconds": spec["max_backoff_seconds"],
-        "timeout_seconds": spec["timeout_seconds"],
+        "model": spec.model,
+        "base_url": spec.base_url,
+        "api_key_env": spec.api_key_env,
+        "api_key": spec.api_key,
+        "max_concurrency": spec.max_concurrency,
+        "max_retries": spec.max_retries,
+        "min_backoff_seconds": spec.min_backoff_seconds,
+        "max_backoff_seconds": spec.max_backoff_seconds,
+        "timeout_seconds": spec.timeout_seconds,
     }
 
-    match spec["type"]:
+    match spec.type:
         case "llm":
             return LLM(**common)
         case "embedder":
@@ -407,7 +407,7 @@ def build_client(spec: ClientSpec) -> LLM | Embedder | Reranker:
         case "reranker":
             return Reranker(**common)
         case _:
-            raise AssertionError(f"Unsupported model type: {spec['type']}")
+            raise AssertionError(f"Unsupported model type: {spec.type}")
 
 
 def infer_model_type(role: str | None) -> ModelKind:
@@ -419,82 +419,295 @@ def infer_model_type(role: str | None) -> ModelKind:
     return "llm"
 
 
+_ENDPOINT_MODEL_REF_KEYS = {
+    "endpoint",
+    "type",
+    "model",
+    "api_key",
+    "api_key_env",
+    "max_concurrency",
+    "max_retries",
+    "min_backoff_seconds",
+    "max_backoff_seconds",
+    "timeout_seconds",
+}
+
+_DIRECT_MODEL_REF_KEYS = {
+    "model",
+    "base_url",
+    "type",
+    "api_key",
+    "api_key_env",
+    "max_concurrency",
+    "max_retries",
+    "min_backoff_seconds",
+    "max_backoff_seconds",
+    "timeout_seconds",
+}
+
+
 def _resolve_client_spec(
     model_ref: ModelRef,
     *,
     role: str | None,
     endpoints: dict[str, EndpointSpec],
 ) -> ClientSpec:
-    role_name = role or "unknown"
-
     if isinstance(model_ref, str):
-        if model_ref not in endpoints:
-            raise ValueError(f"Unknown endpoint alias: {model_ref}")
-        endpoint = endpoints[model_ref]
-        assert endpoint.default_model, f"Endpoint alias {model_ref} needs an explicit model"
-        return {
-            "type": infer_model_type(role),
-            "model": endpoint.default_model,
-            "base_url": endpoint.base_url,
-            "api_key": endpoint.api_key,
-            "api_key_env": endpoint.api_key_env,
-            "max_concurrency": endpoint.max_concurrency,
-            "max_retries": endpoint.max_retries,
-            "min_backoff_seconds": endpoint.min_backoff_seconds,
-            "max_backoff_seconds": endpoint.max_backoff_seconds,
-            "timeout_seconds": endpoint.timeout_seconds,
-        }
+        return _client_spec_from_endpoint_alias(model_ref, role=role, endpoints=endpoints)
 
-    ref = dict(model_ref)
-    endpoint_name = ref.get("endpoint")
-    endpoint = None
-    if endpoint_name is not None:
-        assert isinstance(endpoint_name, str) and endpoint_name, f"Model reference for role {role_name} has an invalid endpoint"
-        endpoint = endpoints[endpoint_name]
+    if _is_endpoint_model_ref(model_ref):
+        return _resolve_endpoint_model_ref(model_ref, role=role, endpoints=endpoints)
 
-    kind = ref.get("type", infer_model_type(role))
-    assert kind in {"llm", "embedder", "reranker"}, f"Unsupported model type: {kind}"
+    return _resolve_direct_model_ref(model_ref, role=role)
 
-    model = ref.get("model")
-    if model is None and endpoint is not None:
+
+def _client_spec_from_endpoint_alias(
+    endpoint_name: str,
+    *,
+    role: str | None,
+    endpoints: dict[str, EndpointSpec],
+) -> ClientSpec:
+    endpoint = _endpoint_spec(endpoints, endpoint_name)
+    assert endpoint.default_model, f"Endpoint alias {endpoint_name} needs an explicit model"
+    return _client_spec(
+        type=_model_kind(None, role=role),
+        model=endpoint.default_model,
+        base_url=endpoint.base_url,
+        api_key=endpoint.api_key,
+        api_key_env=endpoint.api_key_env,
+        max_concurrency=endpoint.max_concurrency,
+        max_retries=endpoint.max_retries,
+        min_backoff_seconds=endpoint.min_backoff_seconds,
+        max_backoff_seconds=endpoint.max_backoff_seconds,
+        timeout_seconds=endpoint.timeout_seconds,
+    )
+
+
+def _resolve_endpoint_model_ref(
+    model_ref: EndpointModelRef,
+    *,
+    role: str | None,
+    endpoints: dict[str, EndpointSpec],
+) -> ClientSpec:
+    role_name = role or "unknown"
+    label = f"Model reference for role {role_name}"
+    _assert_allowed_keys(model_ref, _ENDPOINT_MODEL_REF_KEYS, label=label)
+
+    endpoint_name = _required_str(model_ref, "endpoint", label=f"{label} endpoint")
+    endpoint = _endpoint_spec(endpoints, endpoint_name)
+
+    model = _optional_str(model_ref, "model", label=f"{label} model")
+    if model is None:
         model = endpoint.default_model
-    assert isinstance(model, str) and model, f"Model reference for role {role_name} is missing model"
+    assert model, f"{label} is missing model"
 
-    base_url = ref.get("base_url")
-    if base_url is None and endpoint is not None:
-        base_url = endpoint.base_url
-    assert isinstance(base_url, str) and base_url, f"Model reference for role {role_name} is missing base_url"
-
-    api_key = ref.get("api_key")
-    if api_key is None and endpoint is not None:
+    api_key = _optional_str(model_ref, "api_key", label=f"{label} api_key")
+    if api_key is None:
         api_key = endpoint.api_key
-    assert api_key is None or isinstance(api_key, str), f"Model reference for role {role_name} has an invalid api_key"
 
-    api_key_env = ref.get("api_key_env")
-    if api_key_env is None and endpoint is not None:
-        api_key_env = endpoint.api_key_env
-    if api_key_env is None:
-        api_key_env = "OPENAI_API_KEY"
-    assert api_key_env is None or isinstance(api_key_env, str), f"Model reference for role {role_name} has an invalid api_key_env"
+    default_api_key_env = endpoint.api_key_env if endpoint.api_key_env is not None else "OPENAI_API_KEY"
+    api_key_env = _optional_nullable_str(
+        model_ref,
+        "api_key_env",
+        label=f"{label} api_key_env",
+        default=default_api_key_env,
+    )
 
-    max_concurrency = int(ref.get("max_concurrency", endpoint.max_concurrency if endpoint else 4))
-    max_retries = int(ref.get("max_retries", endpoint.max_retries if endpoint else 4))
-    min_backoff_seconds = float(ref.get("min_backoff_seconds", endpoint.min_backoff_seconds if endpoint else 1.0))
-    max_backoff_seconds = float(ref.get("max_backoff_seconds", endpoint.max_backoff_seconds if endpoint else 60.0))
-    timeout_seconds = float(ref.get("timeout_seconds", endpoint.timeout_seconds if endpoint else 120.0))
+    return _client_spec(
+        type=_model_kind(model_ref.get("type"), role=role),
+        model=model,
+        base_url=endpoint.base_url,
+        api_key=api_key,
+        api_key_env=api_key_env,
+        max_concurrency=_int_override(
+            model_ref,
+            "max_concurrency",
+            label=f"{label} max_concurrency",
+            default=endpoint.max_concurrency,
+        ),
+        max_retries=_int_override(
+            model_ref,
+            "max_retries",
+            label=f"{label} max_retries",
+            default=endpoint.max_retries,
+        ),
+        min_backoff_seconds=_float_override(
+            model_ref,
+            "min_backoff_seconds",
+            label=f"{label} min_backoff_seconds",
+            default=endpoint.min_backoff_seconds,
+        ),
+        max_backoff_seconds=_float_override(
+            model_ref,
+            "max_backoff_seconds",
+            label=f"{label} max_backoff_seconds",
+            default=endpoint.max_backoff_seconds,
+        ),
+        timeout_seconds=_float_override(
+            model_ref,
+            "timeout_seconds",
+            label=f"{label} timeout_seconds",
+            default=endpoint.timeout_seconds,
+        ),
+    )
 
-    return {
-        "type": kind,
-        "model": model,
-        "base_url": base_url,
-        "api_key": api_key,
-        "api_key_env": api_key_env,
-        "max_concurrency": max_concurrency,
-        "max_retries": max_retries,
-        "min_backoff_seconds": min_backoff_seconds,
-        "max_backoff_seconds": max_backoff_seconds,
-        "timeout_seconds": timeout_seconds,
-    }
+
+def _resolve_direct_model_ref(
+    model_ref: DirectModelRef,
+    *,
+    role: str | None,
+) -> ClientSpec:
+    role_name = role or "unknown"
+    label = f"Model reference for role {role_name}"
+    _assert_allowed_keys(model_ref, _DIRECT_MODEL_REF_KEYS, label=label)
+
+    return _client_spec(
+        type=_model_kind(model_ref.get("type"), role=role),
+        model=_required_str(model_ref, "model", label=f"{label} model"),
+        base_url=_required_str(model_ref, "base_url", label=f"{label} base_url"),
+        api_key=_optional_str(model_ref, "api_key", label=f"{label} api_key"),
+        api_key_env=_optional_nullable_str(
+            model_ref,
+            "api_key_env",
+            label=f"{label} api_key_env",
+            default="OPENAI_API_KEY",
+        ),
+        max_concurrency=_int_override(
+            model_ref,
+            "max_concurrency",
+            label=f"{label} max_concurrency",
+            default=4,
+        ),
+        max_retries=_int_override(
+            model_ref,
+            "max_retries",
+            label=f"{label} max_retries",
+            default=4,
+        ),
+        min_backoff_seconds=_float_override(
+            model_ref,
+            "min_backoff_seconds",
+            label=f"{label} min_backoff_seconds",
+            default=1.0,
+        ),
+        max_backoff_seconds=_float_override(
+            model_ref,
+            "max_backoff_seconds",
+            label=f"{label} max_backoff_seconds",
+            default=60.0,
+        ),
+        timeout_seconds=_float_override(
+            model_ref,
+            "timeout_seconds",
+            label=f"{label} timeout_seconds",
+            default=120.0,
+        ),
+    )
+
+
+def _client_spec(
+    *,
+    type: ModelKind,
+    model: str,
+    base_url: str,
+    api_key: str | None,
+    api_key_env: str | None,
+    max_concurrency: int,
+    max_retries: int,
+    min_backoff_seconds: float,
+    max_backoff_seconds: float,
+    timeout_seconds: float,
+) -> ClientSpec:
+    return ClientSpec(
+        type=type,
+        model=model,
+        base_url=base_url,
+        api_key=api_key,
+        api_key_env=api_key_env,
+        max_concurrency=max_concurrency,
+        max_retries=max_retries,
+        min_backoff_seconds=min_backoff_seconds,
+        max_backoff_seconds=max_backoff_seconds,
+        timeout_seconds=timeout_seconds,
+    )
+
+
+def _is_endpoint_model_ref(model_ref: object) -> TypeGuard[EndpointModelRef]:
+    return isinstance(model_ref, dict) and "endpoint" in model_ref
+
+
+def _endpoint_spec(endpoints: dict[str, EndpointSpec], endpoint_name: str) -> EndpointSpec:
+    if endpoint_name not in endpoints:
+        raise ValueError(f"Unknown endpoint alias: {endpoint_name}")
+    return endpoints[endpoint_name]
+
+
+def _assert_allowed_keys(model_ref: dict[str, object], allowed_keys: set[str], *, label: str) -> None:
+    unknown_keys = sorted(set(model_ref) - allowed_keys)
+    assert not unknown_keys, f"{label} has unsupported keys: {', '.join(unknown_keys)}"
+
+
+def _model_kind(value: object, *, role: str | None) -> ModelKind:
+    if value is None:
+        return infer_model_type(role)
+    assert value in {"llm", "embedder", "reranker"}, f"Unsupported model type: {value}"
+    return value
+
+
+def _required_str(model_ref: dict[str, object], key: str, *, label: str) -> str:
+    value = model_ref.get(key)
+    assert isinstance(value, str) and value, f"{label} must be a non-empty string"
+    return value
+
+
+def _optional_str(model_ref: dict[str, object], key: str, *, label: str) -> str | None:
+    if key not in model_ref:
+        return None
+    value = model_ref[key]
+    assert isinstance(value, str) and value, f"{label} must be a non-empty string"
+    return value
+
+
+def _optional_nullable_str(
+    model_ref: dict[str, object],
+    key: str,
+    *,
+    label: str,
+    default: str | None,
+) -> str | None:
+    if key not in model_ref:
+        return default
+    value = model_ref[key]
+    assert value is None or (isinstance(value, str) and value), f"{label} must be a non-empty string or null"
+    return value
+
+
+def _int_override(
+    model_ref: dict[str, object],
+    key: str,
+    *,
+    label: str,
+    default: int,
+) -> int:
+    if key not in model_ref:
+        return default
+    value = model_ref[key]
+    assert isinstance(value, int) and not isinstance(value, bool), f"{label} must be an integer"
+    return value
+
+
+def _float_override(
+    model_ref: dict[str, object],
+    key: str,
+    *,
+    label: str,
+    default: float,
+) -> float:
+    if key not in model_ref:
+        return default
+    value = model_ref[key]
+    assert isinstance(value, (int, float)) and not isinstance(value, bool), f"{label} must be a number"
+    return float(value)
 
 
 def _post_json(

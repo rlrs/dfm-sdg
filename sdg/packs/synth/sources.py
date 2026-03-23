@@ -4,7 +4,7 @@ import json
 import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
-from typing import Any, Literal, TypedDict
+from typing import Any, Literal, TypedDict, cast
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
@@ -17,6 +17,7 @@ from sdg.packs.synth.types import Record
 USER_AGENT = "dfm-sdg/0.1 (synthetic-data-research)"
 WIKIPEDIA_LICENSE = "CC BY-SA 4.0"
 WIKIPEDIA_LICENSE_URL = "https://creativecommons.org/licenses/by-sa/4.0/"
+WikipediaExpander = Literal["structured_wikipedia", "wikidata"]
 
 
 class WikipediaSourceConfig(TypedDict):
@@ -27,8 +28,7 @@ class WikipediaSourceConfig(TypedDict):
     refresh: bool
     batch_size: int
     request_pause: float
-    with_structured_wikipedia: bool
-    with_wikidata: bool
+    expand_with: frozenset[WikipediaExpander]
 
 
 class InlineDocsSourceConfig(TypedDict):
@@ -96,7 +96,7 @@ def load_wikipedia_vital_articles(source_config: WikipediaSourceConfig) -> list[
         request_pause=source_config["request_pause"],
     )
 
-    if source_config["with_structured_wikipedia"]:
+    if "structured_wikipedia" in source_config["expand_with"]:
         docs = attach_structured_wikipedia(
             docs,
             language=language,
@@ -106,7 +106,7 @@ def load_wikipedia_vital_articles(source_config: WikipediaSourceConfig) -> list[
             request_pause=source_config["request_pause"],
         )
 
-    if source_config["with_wikidata"]:
+    if "wikidata" in source_config["expand_with"]:
         docs = attach_wikidata(
             docs,
             cache_dir=cache_dir,
@@ -569,11 +569,6 @@ def _memory_source_config(cfg: dict[str, Any]) -> MemorySourceConfig:
 
 
 def _wikipedia_source_config(memory_cfg: Record) -> WikipediaSourceConfig:
-    expand_with = _string_list(memory_cfg, "expand_with")
-    allowed_expanders = {"structured_wikipedia", "wikidata"}
-    unknown_expanders = sorted(set(expand_with) - allowed_expanders)
-    assert not unknown_expanders, f"Unsupported memory_core expand_with values: {', '.join(unknown_expanders)}"
-
     return {
         "kind": "wikipedia_vital_articles",
         "language": source_language_from_memory_cfg(memory_cfg),
@@ -582,9 +577,16 @@ def _wikipedia_source_config(memory_cfg: Record) -> WikipediaSourceConfig:
         "refresh": _bool_value(memory_cfg, "refresh", default=False),
         "batch_size": _positive_int(memory_cfg, "fetch_batch_size", default=20),
         "request_pause": _non_negative_float(memory_cfg, "request_pause_seconds", default=0.0),
-        "with_structured_wikipedia": "structured_wikipedia" in expand_with,
-        "with_wikidata": "wikidata" in expand_with,
+        "expand_with": _expand_with(memory_cfg),
     }
+
+
+def _expand_with(record: Record) -> frozenset[WikipediaExpander]:
+    raw_values = _string_list(record, "expand_with")
+    allowed_values = {"structured_wikipedia", "wikidata"}
+    unknown_values = sorted(set(raw_values) - allowed_values)
+    assert not unknown_values, f"Unsupported memory_core expand_with values: {', '.join(unknown_values)}"
+    return frozenset(cast(WikipediaExpander, value) for value in raw_values)
 
 
 def _load_path_docs(source_config: PathDocsSourceConfig) -> list[dict[str, Any]]:

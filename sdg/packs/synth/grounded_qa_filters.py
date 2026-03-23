@@ -4,6 +4,7 @@ import re
 from typing import Any
 from xml.etree import ElementTree
 
+from sdg.packs.synth.languages import row_uses_cross_language
 from sdg.packs.synth.memorization_text import as_list, meaningful_tokens, normalize_text
 
 STATEMENT_PATTERN = re.compile(r"\s+")
@@ -208,7 +209,7 @@ def row_citation_supported(row: dict[str, Any]) -> bool:
 
 
 def row_language_quality(row: dict[str, Any]) -> bool:
-    if row.get("meta", {}).get("language_mode") != "cross_language":
+    if not row_uses_cross_language(row):
         return True
     judge = row.get("scores", {}).get("judge")
     if not judge:
@@ -301,7 +302,7 @@ def _has_visible_text(text: str) -> bool:
 
 
 def _support_reasoning_text(row: dict[str, Any]) -> str:
-    if row.get("meta", {}).get("language_mode") != "cross_language":
+    if not row_uses_cross_language(row):
         return str(row.get("reasoning", "")).strip()
 
     source_reasoning = str(row["hidden"].get("source_reasoning", "")).strip()

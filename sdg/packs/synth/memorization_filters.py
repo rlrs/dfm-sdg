@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from sdg.packs.synth.languages import row_uses_cross_language
 from sdg.packs.synth.memorization_text import (
     as_list,
     meaningful_tokens,
@@ -72,7 +73,7 @@ def row_reasoning_grounded(row: dict[str, Any]) -> bool:
 
 
 def _support_target_text(row: dict[str, Any]) -> str:
-    if row.get("meta", {}).get("language_mode") != "cross_language":
+    if not row_uses_cross_language(row):
         return str(row.get("target", "")).strip()
 
     source_target = str(row["hidden"].get("source_target", "")).strip()
@@ -81,7 +82,7 @@ def _support_target_text(row: dict[str, Any]) -> str:
 
 
 def _support_reasoning_text(row: dict[str, Any]) -> str:
-    if row.get("meta", {}).get("language_mode") != "cross_language":
+    if not row_uses_cross_language(row):
         return str(row.get("reasoning", "")).strip()
 
     source_reasoning = str(row["hidden"].get("source_reasoning", "")).strip()
@@ -152,7 +153,7 @@ def row_answer_supported(row: dict[str, Any]) -> bool:
 
 
 def row_language_quality(row: dict[str, Any]) -> bool:
-    if row.get("meta", {}).get("language_mode") != "cross_language":
+    if not row_uses_cross_language(row):
         return True
     judge = row.get("scores", {}).get("judge")
     if not judge:

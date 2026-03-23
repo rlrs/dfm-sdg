@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from sdg.packs.synth.gen_memorization import retrieve_support_row
-from sdg.packs.synth.languages import load_language_plan
+from sdg.packs.synth.languages import load_language_plan, row_language_mode
 
 
 def test_load_language_plan_defaults_to_source_language() -> None:
@@ -73,11 +73,23 @@ def test_load_language_plan_reads_family_specific_config() -> None:
     }
 
 
+def test_row_language_mode_derives_from_language_fields() -> None:
+    row = {
+        "meta": {
+            "source_language": "en",
+            "prompt_language": "da",
+            "reasoning_language": "en",
+            "target_language": "da",
+        }
+    }
+
+    assert row_language_mode(row) == "cross_language"
+
+
 def test_retrieve_support_row_uses_source_side_query_for_cross_language_rows() -> None:
     row = {
         "prompt": "Hvad handler filmen om?",
         "meta": {
-            "language_mode": "cross_language",
             "source_language": "en",
             "prompt_language": "da",
             "reasoning_language": "en",

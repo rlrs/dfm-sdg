@@ -39,7 +39,6 @@ generation:
   max_rows_per_family: 50
   train_fraction: 0.8
   memorization:
-    use_llm: true
     lead_sentences: 10
     max_sentences_per_doc: 2
     min_sentence_words: 5

@@ -38,7 +38,6 @@ generation:
   max_rows_per_family: 20
   train_fraction: 0.8
   grounded_qa:
-    use_llm: true
     lead_sentences: 8
     max_sentences_per_doc: 1
     min_sentence_words: 5
