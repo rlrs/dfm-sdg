@@ -248,7 +248,6 @@ def annotate_filter_result(row: dict[str, Any], reasons: list[str]) -> dict[str,
     updated = dict(row)
     hidden = dict(row.get("hidden") or {})
     hidden["generation_filter"] = {
-        "passed": not reasons,
         "reasons": list(reasons),
     }
     updated["hidden"] = hidden

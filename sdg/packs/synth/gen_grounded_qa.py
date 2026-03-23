@@ -1,13 +1,12 @@
 from __future__ import annotations
 
 import asyncio
-import json
-from collections.abc import Callable, Iterable, Iterator
+from collections.abc import Iterator
 from random import Random
 from typing import Any, TypedDict
 from xml.sax.saxutils import escape
 
-from sdg.commons import Artifact, store
+from sdg.commons import Artifact
 from sdg.commons.model import LLM
 from sdg.commons.run_log import log_event
 from sdg.packs.synth.family_runtime import (
@@ -39,11 +38,11 @@ from sdg.packs.synth.memorization_text import (
     as_list,
     clean_recall_list,
     clean_recall_text,
-    normalize_text,
     split_sentences,
     tokenize,
 )
 from sdg.packs.synth.personas import iter_query_plans
+from sdg.packs.synth.rows import grounded_qa_required_cited_sources_for_row
 
 
 class GroundedQASettings(TypedDict):
@@ -225,7 +224,7 @@ def _seed_source(
 
 
 async def _generate_candidate_row_async(
-    item: _IndexedQueryPlan,
+    item: IndexedQueryPlan,
     *,
     memory_index: dict[str, Any],
     chunk_lookup: dict[str, dict[str, Any]],
@@ -279,7 +278,6 @@ async def _make_row_async(
     source_target = _default_source_target(bundle, task_plan)
     bridge_source_ids = [source["source_id"] for source in bundle["bridge_sources"]]
     additional_seed_urls = [source["url"] for source in bundle["bridge_sources"] if source.get("url")]
-    required_cited_sources = _required_cited_sources(question["question_type"], bundle)
     row = {
         "id": f"grounded_qa-{index:06d}",
         "query_seed_url": doc.get("url"),
@@ -289,7 +287,6 @@ async def _make_row_async(
         "prompt": question["prompt"],
         "target": "",
         "reasoning": "",
-        "messages": [],
         "sources": [],
         "checks": {},
         "scores": {},
@@ -308,7 +305,6 @@ async def _make_row_async(
             "teacher_bundle": teacher_bundle,
             "source_target": source_target,
             "source_reasoning": "",
-            "required_cited_sources": required_cited_sources,
         },
         "meta": {
             "family": "grounded_qa",
@@ -333,10 +329,8 @@ async def _make_row_async(
             "assistant_style_source": assistant_style["source"],
             "assistant_style_tags": assistant_style["tags"],
             "reasoning_style": "grounded_qa_trace_v1",
-            "required_cited_sources": required_cited_sources,
         },
     }
-    row["messages"] = _grounded_qa_messages(row)
     return row
 
 
@@ -356,15 +350,6 @@ def _default_source_target(bundle: dict[str, Any], task_plan: dict[str, Any]) ->
     if coverage_points:
         return " ".join(coverage_points[:3])
     return bundle["primary_sentence"]
-
-
-def _required_cited_sources(question_type: str, bundle: dict[str, Any]) -> int:
-    source_count = 1 + len(bundle["bridge_sources"])
-    if source_count < 2:
-        return 1
-    if question_type in _simple_question_types():
-        return 1
-    return 2
 
 
 def _grounded_qa_messages(row: dict[str, Any]) -> list[dict[str, str]]:
@@ -407,17 +392,6 @@ def _grounded_qa_system_prompt(row: dict[str, Any]) -> str:
         "Keep any text outside statement tags short and non-factual. "
         'Put factual claims inside <statement cites="...">...</statement> and cite the supporting source ids for each statement.'
     )
-
-
-def _simple_question_types() -> set[str]:
-    return {
-        "fact_disambiguation",
-        "fact_verification",
-        "factoid_qa",
-        "identification",
-        "recall",
-    }
-
 
 async def _llm_task_plan_async(plan: dict[str, Any], llm: LLM) -> dict[str, Any]:
     parsed = await achat_json(llm, _task_plan_messages(plan), temperature=0.4)
@@ -651,7 +625,6 @@ def retrieve_support_row(
 
     updated = dict(row)
     updated["sources"] = sources
-    updated["meta"] = {**row["meta"], "source_count": len(sources)}
     return updated
 
 
@@ -831,7 +804,7 @@ def _answer_messages(row: dict[str, Any]) -> list[dict[str, str]]:
     target_language = language_name(row["meta"]["target_language"])
     target_guidance = _language_generation_guidance(row["meta"]["target_language"])
     source_block = _format_sources_block(row["sources"])
-    required_cited_sources = int(row["hidden"].get("required_cited_sources", 1))
+    required_cited_sources = grounded_qa_required_cited_sources_for_row(row)
     synthesis_instruction = ""
     if required_cited_sources > 1:
         synthesis_instruction = (
@@ -914,7 +887,6 @@ def with_target(row: dict[str, Any], answer: dict[str, str]) -> dict[str, Any]:
     updated["hidden"] = hidden
     hidden["source_reasoning"] = _render_source_reasoning(updated)
     updated["hidden"] = hidden
-    updated["messages"] = _grounded_qa_messages(updated)
     return updated
 
 
@@ -924,7 +896,6 @@ def with_generation_error(row: dict[str, Any], error: str) -> dict[str, Any]:
     hidden["generation_error"] = error
     updated["hidden"] = hidden
     updated["target"] = ""
-    updated["messages"] = _grounded_qa_messages(updated)
     updated["scores"] = {
         **row["scores"],
         "judge": {
@@ -959,7 +930,7 @@ def _judge_messages(row: dict[str, Any], diagnostics: dict[str, Any]) -> list[di
         f"- supported_statements: {diagnostics['supported_statements']}/{diagnostics['total_statements']}",
     ]
     used_citations = extract_citation_ids(str(row["target"]))
-    required_cited_sources = int(row["hidden"].get("required_cited_sources", 1))
+    required_cited_sources = grounded_qa_required_cited_sources_for_row(row)
     diagnostics_lines.append(f"- required_cited_sources: {required_cited_sources}")
     diagnostics_lines.append(f"- used_cited_sources: {len(set(used_citations))}")
     target_free_text = extract_free_text_segments(str(row["target"]))
@@ -1122,7 +1093,7 @@ def _bundle_evidence_points(bundle: dict[str, Any]) -> list[str]:
 
 def _default_source_plan(row: dict[str, Any]) -> list[str]:
     source_language = row["meta"]["source_language"]
-    required_cited_sources = int(row["hidden"].get("required_cited_sources", 1))
+    required_cited_sources = grounded_qa_required_cited_sources_for_row(row)
     selected = row["sources"][:required_cited_sources]
     supporting = row["sources"][required_cited_sources:required_cited_sources + 2]
     lines: list[str] = []

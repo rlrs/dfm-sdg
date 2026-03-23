@@ -3,11 +3,11 @@ from __future__ import annotations
 import asyncio
 import json
 import re
-from collections.abc import Callable, Iterable, Iterator
+from collections.abc import Iterable, Iterator
 from random import Random
 from typing import Any, TypedDict
 
-from sdg.commons import Artifact, store
+from sdg.commons import Artifact
 from sdg.commons.model import LLM
 from sdg.packs.synth.family_runtime import (
     FamilyStats,
@@ -326,14 +326,12 @@ def with_backreasoning(row: dict[str, Any], trace: dict[str, Any]) -> dict[str, 
     if proposed_target and _target_needs_upgrade(updated):
         updated["target"] = proposed_target
 
-    updated["messages"] = _memorization_messages(updated)
     return updated
 
 
 def with_target(row: dict[str, Any], target: str) -> dict[str, Any]:
     updated = dict(row)
     updated["target"] = target
-    updated["messages"] = _memorization_messages(updated)
     return updated
 
 
@@ -346,7 +344,7 @@ def with_judge(row: dict[str, Any], judge: dict[str, Any]) -> dict[str, Any]:
 
 
 async def _generate_candidate_row_async(
-    item: _IndexedQueryPlan,
+    item: IndexedQueryPlan,
     *,
     memory_index: dict[str, Any],
     chunk_lookup: dict[str, dict[str, Any]],
@@ -484,7 +482,6 @@ async def _make_row_async(
             "teacher_bundle": teacher_bundle,
             "target_seed": target_seed,
         },
-        "messages": [],
         "sources": [],
         "checks": {},
         "scores": {},
@@ -513,7 +510,6 @@ async def _make_row_async(
             "reasoning_style": "teacher_backreasoning_v1",
         },
     }
-    row["messages"] = _memorization_messages(row)
     return row
 
 

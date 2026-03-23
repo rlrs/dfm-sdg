@@ -12,6 +12,7 @@ from sdg.commons.model import LLM, load_clients
 from sdg.commons.run_log import log_event, write_snapshot
 from sdg.commons.work_queue import map_async_unordered
 from sdg.packs.synth.languages import LanguagePlan, load_language_plan
+from sdg.packs.synth.rows import materialize_row
 
 
 class FamilyStats(TypedDict):
@@ -341,7 +342,7 @@ async def write_family_outputs_async(
 
 
 def write_jsonl_line(handle: TextIO, row: dict[str, Any]) -> None:
-    handle.write(json.dumps(row, sort_keys=True))
+    handle.write(json.dumps(materialize_row(row), sort_keys=True))
     handle.write("\n")
     handle.flush()
 

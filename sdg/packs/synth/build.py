@@ -5,8 +5,8 @@ from pathlib import Path
 from typing import Any
 
 from sdg.commons import Artifact, BuildResult, store
-from sdg.commons.run_log import log_event
 from sdg.commons.run import load, run
+from sdg.commons.run_log import log_event
 from sdg.commons.store import read_jsonl
 from sdg.commons.utils import read_json, write_json
 from sdg.packs.synth.build_memory_core import build_memory_core, clean_corpus
@@ -19,7 +19,11 @@ from sdg.packs.synth.gen_grounded_qa import generate_grounded_qa
 from sdg.packs.synth.gen_memorization import generate_memorization
 from sdg.packs.synth.rows import load_generated_rows
 from sdg.packs.synth.sources import load_sources
-from sdg.packs.synth.verify import verify_grounded_qa, verify_memorization, verify_memory_core
+from sdg.packs.synth.verify import (
+    verify_grounded_qa,
+    verify_memorization,
+    verify_memory_core,
+)
 
 
 def build(cfg: dict[str, Any]) -> BuildResult:
@@ -280,7 +284,7 @@ def _summarize_grounded_qa_outputs(outputs_dir: Path) -> dict[str, Any]:
         "question_types": _count_values(rows, lambda row: row["meta"].get("question_type")),
         "query_angles": _count_values(rows, lambda row: row["hidden"].get("query_angle")),
         "source_titles": _count_values(rows, lambda row: row["hidden"].get("source_title"), limit=10),
-        "source_counts": _count_values(rows, lambda row: row["meta"].get("source_count")),
+        "source_counts": _count_values(rows, lambda row: len(row.get("sources", []))),
         "reject_reasons": _count_reject_reasons(rejected),
         "kept_preview": _preview_rows(outputs_dir / "grounded_qa_preview.jsonl"),
         "rejected_preview": _preview_rows(outputs_dir / "grounded_qa_rejected_preview.jsonl"),

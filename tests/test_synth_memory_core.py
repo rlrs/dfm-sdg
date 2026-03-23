@@ -9,8 +9,7 @@ import pytest
 from sdg.commons import store
 from sdg.commons.run import progress
 from sdg.commons.viewer import render_run_view, start_viewer_server
-from sdg.packs.synth import gen_grounded_qa
-from sdg.packs.synth import gen_memorization
+from sdg.packs.synth import gen_grounded_qa, gen_memorization
 from sdg.packs.synth.build import build, publish, summarize, verify
 from sdg.packs.synth.grounded_qa_filters import (
     citation_support_diagnostics,
@@ -590,7 +589,6 @@ def test_answer_messages_require_multi_source_synthesis_for_broad_rows() -> None
             "question_type": "overview",
         },
         "hidden": {
-            "required_cited_sources": 2,
             "persona": {
                 "name": "Test",
                 "knowledge_level": "novice",
@@ -638,7 +636,6 @@ async def test_generate_answer_retries_when_model_omits_statement_tags() -> None
             "question_type": "overview",
         },
         "hidden": {
-            "required_cited_sources": 1,
             "persona": {
                 "name": "Test",
                 "knowledge_level": "novice",
@@ -804,7 +801,8 @@ def test_retrieve_support_row_keeps_seed_and_bridge_sources_first() -> None:
     updated = gen_grounded_qa.retrieve_support_row(row, index, chunk_lookup, {"retrieve_top_k": 3})
 
     assert [source["source_id"] for source in updated["sources"][:2]] == ["seed_doc", "bridge_doc"]
-    assert updated["meta"]["source_count"] == 3
+    assert len(updated["sources"]) == 3
+    assert "source_count" not in updated["meta"]
 
 
 def test_backreasoning_messages_require_source_triage() -> None:
