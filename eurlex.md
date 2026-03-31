@@ -8,7 +8,7 @@ The task shape is:
 
 - input: Danish legal text
 - target: Danish summary
-- generated instruction: a short Danish prompt asking for a formal legal summary
+- prompt: a fixed Danish instruction asking for a formal legal summary
 
 ## Why This Fits The Existing Pack
 
@@ -17,7 +17,13 @@ The current backtranslation pack already does the core thing we need:
 - take a finished target
 - ask a model to infer a prompt that would have produced it
 
-For EUR-Lex summarization, the only difference is that the final prompt must include a source document in addition to the generated instruction.
+For EUR-Lex summarization, the final prompt must include a source document in addition to the instruction.
+
+The important difference is that this profile should not use an LLM prompt generator.
+
+The EUR-Lex documents are long enough that sending the full source text to another model just to synthesize an instruction would be unnecessarily expensive.
+
+So this profile should be template-backed, not model-backed.
 
 ## Minimal Refactor
 
@@ -55,21 +61,49 @@ Preferred output style:
 - Danish
 - focused on purpose, scope, key provisions, and affected parties
 
-Example generated instruction shape:
+Example instruction shape:
 
 `Skriv en kort, saglig opsummering på dansk af nedenstående EU-retsakt. Fremhæv formål, anvendelsesområde, centrale bestemmelser og berørte aktører. Hold stilen neutral og officiel.`
+
+This should come from a fixed template or a very small hand-written variant set.
+
+No LLM generation step is needed for the instruction itself.
+
+## Length First
+
+Length should be a first-class concern for this profile.
+
+Before choosing final thresholds, we should scan the dataset and measure:
+
+- input character lengths
+- input token lengths
+- summary character lengths
+- summary token lengths
+- compression ratio between source and summary
+
+Then filter explicitly instead of guessing.
+
+Likely controls:
+
+- `min_input_chars`
+- `max_input_chars`
+- `min_target_chars`
+- `max_target_chars`
+- optional token-based equivalents if we want model-specific context control
+
+The first implementation should also record length metadata on each row so we can tighten filters later without rerunning the analysis step.
 
 ## Row Construction
 
 For this profile:
 
-- generated instruction becomes the first part of `prompt`
+- fixed instruction becomes the first part of `prompt`
 - the legal text is appended after the instruction
 - the gold summary becomes `target`
 
 Conceptually:
 
-- `prompt = <generated instruction> + "\\n\\nTekst:\\n" + <input_text>`
+- `prompt = <fixed instruction> + "\\n\\nTekst:\\n" + <input_text>`
 - `target = <target_text>`
 
 ## Config Shape
@@ -80,9 +114,6 @@ Example:
 
 ```yaml
 pack: backtranslation
-
-models:
-  instruction_writer: openai
 
 source:
   dataset: dennlinger/eur-lex-sum
@@ -95,23 +126,25 @@ generation:
   min_input_chars: 1000
   min_target_chars: 200
   max_input_chars: 12000
-  temperature: 0.2
   train_fraction: 0.9
 ```
 
 ## Implementation Steps
 
-1. Generalize the normalized source record from article-specific fields to generic example fields.
-2. Add profile-specific record loading for `legal_summary_da`.
-3. Add profile-specific instruction prompting for EUR-Lex summarization.
-4. Build final prompts by combining generated instruction with the legal source text.
-5. Add one dedicated config file for EUR-Lex.
-6. Add a focused test that uses a tiny fake EUR-Lex-style source example.
+1. Add a generic example shape in the backtranslation pack that supports `input_text` and `target_text`.
+2. Add a `legal_summary_da` profile that loads EUR-Lex source-summary pairs directly.
+3. Add a fixed Danish instruction template for the profile instead of using an LLM.
+4. Add a small stats step or helper to inspect source and summary length distributions.
+5. Add explicit min/max length filtering for both input and target.
+6. Build final prompts by combining the fixed instruction with the legal source text.
+7. Add one dedicated config file for EUR-Lex.
+8. Add a focused test that uses a tiny fake EUR-Lex-style source example.
 
 ## Non-Goals
 
 Not part of the first version:
 
+- LLM-based prompt generation
 - translation backtranslation
 - multilingual alignment logic
 - using Dynaword as the EUR-Lex source
