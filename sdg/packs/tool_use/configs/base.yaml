@@ -1,0 +1,7 @@
+pack: tool_use
+seed: 11
+reuse_completed: true
+generation:
+  sample_count: 4
+  shuffle_examples: false
+  train_fraction: 0.75

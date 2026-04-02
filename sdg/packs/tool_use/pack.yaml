@@ -1,0 +1,7 @@
+name: tool_use
+description: Starter scaffold for structured tool-calling synthetic data.
+entrypoints:
+  build: sdg.packs.tool_use.build:build
+  verify: sdg.packs.tool_use.build:verify
+  summarize: sdg.packs.tool_use.build:summarize
+  publish: sdg.packs.tool_use.build:publish

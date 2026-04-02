@@ -1,0 +1,7 @@
+name: python_algorithms
+description: Starter scaffold for Python algorithm tasks with executable tests.
+entrypoints:
+  build: sdg.packs.python_algorithms.build:build
+  verify: sdg.packs.python_algorithms.build:verify
+  summarize: sdg.packs.python_algorithms.build:summarize
+  publish: sdg.packs.python_algorithms.build:publish

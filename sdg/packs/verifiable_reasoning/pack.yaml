@@ -1,0 +1,7 @@
+name: verifiable_reasoning
+description: Starter scaffold for exactly checkable synthetic reasoning tasks.
+entrypoints:
+  build: sdg.packs.verifiable_reasoning.build:build
+  verify: sdg.packs.verifiable_reasoning.build:verify
+  summarize: sdg.packs.verifiable_reasoning.build:summarize
+  publish: sdg.packs.verifiable_reasoning.build:publish

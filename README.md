@@ -10,6 +10,9 @@ It keeps the shared layer thin and puts method-specific logic in packs.
 - `sdg/packs/demo/`: tiny reference pack showing the full flow end to end
 - `sdg/packs/backtranslation/`: backtranslation-style data generation from finished texts
 - `sdg/packs/synth/`: the main synthesis pack for memory-core building, memorization, grounded QA, and related workflows
+- `sdg/packs/verifiable_reasoning/`: starter scaffold for exactly checkable reasoning families, starting with logic puzzles
+- `sdg/packs/tool_use/`: starter scaffold for structured tool-calling rows and validators
+- `sdg/packs/python_algorithms/`: starter scaffold for code-generation tasks with executable checks
 - `tests/`: pack tests and shared runtime tests
 - `artifacts/runs/<pack>/<run-id>/`: local run outputs, logs, progress snapshots, and generated datasets
 - `reports/<pack>/<run-id>/`: published outputs such as parquet exports and reports
@@ -24,6 +27,9 @@ uv run sdg list-packs
 uv run sdg build sdg/packs/demo/configs/base.yaml
 uv run sdg build sdg/packs/backtranslation/configs/base.yaml
 uv run sdg build sdg/packs/synth/configs/smoke.yaml
+uv run sdg build sdg/packs/verifiable_reasoning/configs/base.yaml
+uv run sdg build sdg/packs/tool_use/configs/base.yaml
+uv run sdg build sdg/packs/python_algorithms/configs/base.yaml
 ```
 
 ## Typical workflow
