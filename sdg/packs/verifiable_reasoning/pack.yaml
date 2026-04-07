@@ -1,5 +1,5 @@
 name: verifiable_reasoning
-description: Starter scaffold for exactly checkable synthetic reasoning tasks.
+description: Exact reasoning pack with planned bilingual families, explicit recipe coverage, and deterministic dataset-level quality gates.
 entrypoints:
   build: sdg.packs.verifiable_reasoning.build:build
   verify: sdg.packs.verifiable_reasoning.build:verify

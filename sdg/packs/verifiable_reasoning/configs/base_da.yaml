@@ -4,5 +4,5 @@ reuse_completed: true
 generation:
   family: zebra_logic
   count: 20
-  languages: [en]
+  languages: [da]
   train_fraction: 0.8

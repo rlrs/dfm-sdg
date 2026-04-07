@@ -2,7 +2,7 @@ pack: verifiable_reasoning
 seed: 7
 reuse_completed: true
 generation:
-  family: zebra_logic
-  count: 20
-  languages: [en]
+  families: [zebra_logic, lineup_logic]
+  count: 24
+  languages: [en, da]
   train_fraction: 0.8
