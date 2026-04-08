@@ -1,0 +1,8 @@
+pack: verifiable_reasoning
+seed: 7
+reuse_completed: true
+generation:
+  family: futoshiki_logic
+  count: 20
+  languages: [da]
+  train_fraction: 0.8

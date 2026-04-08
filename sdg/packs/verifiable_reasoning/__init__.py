@@ -1,3 +1,10 @@
-from sdg.packs.verifiable_reasoning.build import build, publish, summarize, verify
+from sdg.packs.verifiable_reasoning.build import (
+    attach_targets,
+    build,
+    publish,
+    summarize,
+    verify,
+    verify_rows,
+)
 
-__all__ = ["build", "publish", "summarize", "verify"]
+__all__ = ["attach_targets", "build", "publish", "summarize", "verify", "verify_rows"]

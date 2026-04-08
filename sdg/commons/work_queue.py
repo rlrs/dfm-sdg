@@ -1,19 +1,14 @@
-from __future__ import annotations
-
 import asyncio
 import time
 from collections.abc import AsyncIterator, Awaitable, Callable, Iterable
 from dataclasses import dataclass
-from typing import Generic, TypeVar
 
-Item = TypeVar("Item")
-Result = TypeVar("Result")
 ProgressFn = Callable[[int, int | None, int], None]
-WorkerFn = Callable[[int, Item], Awaitable[Result]]
+type WorkerFn[Item, Result] = Callable[[int, Item], Awaitable[Result]]
 
 
 @dataclass(frozen=True)
-class _WorkItem(Generic[Item]):
+class _WorkItem[Item]:
     index: int
     value: Item
 
@@ -24,7 +19,7 @@ class _StopWork:
 
 
 @dataclass(frozen=True)
-class _WorkResult(Generic[Result]):
+class _WorkResult[Result]:
     index: int
     value: Result
 
@@ -39,17 +34,18 @@ class _WorkerFinished:
     pass
 
 
-InputMessage = _WorkItem[Item] | _StopWork
-OutputMessage = _WorkResult[Result] | _WorkError | _WorkerFinished
+type InputMessage[Item] = _WorkItem[Item] | _StopWork
+type OutputMessage[Result] = _WorkResult[Result] | _WorkError | _WorkerFinished
 
 
-async def map_async_ordered(
+async def map_async_ordered[Item, Result](
     items: Iterable[Item],
     worker: WorkerFn[Item, Result],
     *,
     concurrency: int,
     progress: ProgressFn | None = None,
     total: int | None = None,
+    producer_threaded: bool = False,
 ) -> AsyncIterator[Result]:
     async for value in _map_async(
         items,
@@ -58,17 +54,19 @@ async def map_async_ordered(
         progress=progress,
         total=total,
         ordered=True,
+        producer_threaded=producer_threaded,
     ):
         yield value
 
 
-async def map_async_unordered(
+async def map_async_unordered[Item, Result](
     items: Iterable[Item],
     worker: WorkerFn[Item, Result],
     *,
     concurrency: int,
     progress: ProgressFn | None = None,
     total: int | None = None,
+    producer_threaded: bool = False,
 ) -> AsyncIterator[Result]:
     async for value in _map_async(
         items,
@@ -77,11 +75,12 @@ async def map_async_unordered(
         progress=progress,
         total=total,
         ordered=False,
+        producer_threaded=producer_threaded,
     ):
         yield value
 
 
-async def _map_async(
+async def _map_async[Item, Result](
     items: Iterable[Item],
     worker: WorkerFn[Item, Result],
     *,
@@ -89,6 +88,7 @@ async def _map_async(
     progress: ProgressFn | None,
     total: int | None,
     ordered: bool,
+    producer_threaded: bool,
 ) -> AsyncIterator[Result]:
     worker_count = max(concurrency, 1)
     queue_size = max(worker_count * 2, 1)
@@ -100,7 +100,15 @@ async def _map_async(
 
     pending: asyncio.Queue[InputMessage[Item]] = asyncio.Queue(maxsize=queue_size)
     completed: asyncio.Queue[OutputMessage[Result]] = asyncio.Queue(maxsize=queue_size)
-    producer = asyncio.create_task(_produce_work(items, pending, completed, worker_count))
+    producer = asyncio.create_task(
+        _produce_work(
+            items,
+            pending,
+            completed,
+            worker_count,
+            producer_threaded=producer_threaded,
+        )
+    )
     workers = [
         asyncio.create_task(_run_worker(worker, pending, completed))
         for _ in range(worker_count)
@@ -171,15 +179,18 @@ async def _map_async(
         await asyncio.gather(producer, *workers, return_exceptions=True)
 
 
-async def _produce_work(
+async def _produce_work[Item, Result](
     items: Iterable[Item],
     pending: asyncio.Queue[InputMessage[Item]],
     completed: asyncio.Queue[OutputMessage[Result]],
     worker_count: int,
+    *,
+    producer_threaded: bool,
 ) -> int:
     produced_count = 0
     try:
-        for index, item in enumerate(items):
+        item_iterator = iter(items)
+        async for index, item in _enumerate_items(item_iterator, producer_threaded=producer_threaded):
             await pending.put(_WorkItem(index=index, value=item))
             produced_count = index + 1
     except Exception as error:
@@ -190,7 +201,28 @@ async def _produce_work(
     return produced_count
 
 
-async def _run_worker(
+async def _enumerate_items[Item](
+    item_iterator,
+    *,
+    producer_threaded: bool,
+) -> AsyncIterator[tuple[int, Item]]:
+    sentinel = object()
+    index = 0
+
+    while True:
+        if producer_threaded:
+            item = await asyncio.to_thread(next, item_iterator, sentinel)
+        else:
+            item = next(item_iterator, sentinel)
+
+        if item is sentinel:
+            return
+
+        yield index, item
+        index += 1
+
+
+async def _run_worker[Item, Result](
     worker: WorkerFn[Item, Result],
     pending: asyncio.Queue[InputMessage[Item]],
     completed: asyncio.Queue[OutputMessage[Result]],
@@ -212,7 +244,7 @@ async def _run_worker(
                 raise AssertionError(f"Unsupported work item: {message}")
 
 
-def _known_total(items: Iterable[Item]) -> int | None:
+def _known_total[Item](items: Iterable[Item]) -> int | None:
     try:
         return len(items)  # type: ignore[arg-type]
     except TypeError:
