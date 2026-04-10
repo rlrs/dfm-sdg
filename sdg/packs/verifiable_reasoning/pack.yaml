@@ -1,5 +1,5 @@
 name: verifiable_reasoning
-description: Prompt-only exact reasoning pack with planned bilingual families, including ordering, zebra, futoshiki, skyscraper, numbrix, and hitori puzzles, plus deterministic verification for both puzzles and attached responses.
+description: Prompt-only exact reasoning pack with planned bilingual families, including ordering, zebra, knights-and-knaves, jug puzzles, countdown-equal arithmetic, set splitting, cryptarithmetic, futoshiki, skyscraper, numbrix, hitori, kakurasu, light-up, blocked-star placement, and star battle puzzles, plus deterministic verification for both puzzles and attached responses.
 entrypoints:
   build: sdg.packs.verifiable_reasoning.build:build
   verify: sdg.packs.verifiable_reasoning.build:verify

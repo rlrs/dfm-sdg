@@ -844,16 +844,16 @@ def _answer_lines(*, language: str, size: int, answer_variant: str) -> tuple[str
 
     if language == "da":
         first_line = {
-            "respond": f"Når du giver dit endelige svar, skal gitteret have præcis {size} linjer i dette format:",
-            "write": f"Når du skriver det endelige svar, skal du bruge præcis {size} linjer i dette format:",
-            "complete": f"Giv det endelige gitter med præcis {size} linjer i dette format:",
+            "respond": f"Inde i det endelige svar skal gitteret have præcis {size} linjer i dette format:",
+            "write": f"Inde i det endelige svar skal du bruge præcis {size} linjer i dette format:",
+            "complete": f"Selve svarindholdet skal være det udfyldte gitter med præcis {size} linjer i dette format:",
         }[answer_variant]
         return (first_line, *example_grid)
 
     first_line = {
-        "respond": f"When you give your final answer, the grid should use exactly {size} lines in this format:",
-        "write": f"When you write the final answer, use exactly {size} lines in this format:",
-        "complete": f"Give the final grid using exactly {size} lines in this format:",
+        "respond": f"Inside the final response, the grid should use exactly {size} lines in this format:",
+        "write": f"Inside the final response, use exactly {size} lines in this format:",
+        "complete": f"The answer content should be the completed grid with exactly {size} lines in this format:",
     }[answer_variant]
     return (first_line, *example_grid)
 

@@ -620,17 +620,17 @@ def _answer_lines(
 
     if language == "da":
         first_line = {
-            "respond": f"Når du giver dit endelige svar, skal du bruge præcis {rows} linjer med {cols} tegn per linje og ingen mellemrum.",
-            "write": f"Når du skriver det endelige svar, skal du bruge præcis {rows} linjer med {cols} tegn per linje og ingen mellemrum.",
-            "complete": f"Giv den endelige maske med præcis {rows} linjer og {cols} tegn per linje uden mellemrum.",
+            "respond": f"Inde i det endelige svar skal du bruge præcis {rows} linjer med {cols} tegn per linje og ingen mellemrum.",
+            "write": f"Inde i det endelige svar skal du bruge præcis {rows} linjer med {cols} tegn per linje og ingen mellemrum.",
+            "complete": f"Selve svarindholdet skal være masken med præcis {rows} linjer og {cols} tegn per linje uden mellemrum.",
         }[answer_variant]
         second_line = "Brug '.' for et felt, der bliver stående, og '*' for et sort felt."
         return (first_line, second_line, f"Eksempellinje: {example_line}")
 
     first_line = {
-        "respond": f"When you give your final answer, use exactly {rows} lines with {cols} characters per line and no spaces.",
-        "write": f"When you write the final answer, use exactly {rows} lines with {cols} characters per line and no spaces.",
-        "complete": f"Give the final mask using exactly {rows} lines with {cols} characters per line and no spaces.",
+        "respond": f"Inside the final response, use exactly {rows} lines with {cols} characters per line and no spaces.",
+        "write": f"Inside the final response, use exactly {rows} lines with {cols} characters per line and no spaces.",
+        "complete": f"The answer content should be the mask with exactly {rows} lines and {cols} characters per line, with no spaces.",
     }[answer_variant]
     second_line = "Use '.' for a remaining cell and '*' for a blacked-out cell."
     return (first_line, second_line, f"Example line: {example_line}")

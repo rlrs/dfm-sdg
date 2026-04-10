@@ -1,0 +1,14 @@
+pack: verifiable_reasoning
+seed: 7
+reuse_completed: true
+generation:
+  family: setsplitting_logic
+  count: 20
+  languages: [da]
+  train_fraction: 0.8
+  attach_targets: true
+models:
+  answer_teacher:
+    endpoint: openai
+    model: gpt-5.4-mini
+    timeout_seconds: 3000.0

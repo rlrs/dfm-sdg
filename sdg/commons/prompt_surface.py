@@ -43,6 +43,14 @@ def default_surface_axes() -> dict[str, tuple[str, ...]]:
         "surface_instruction": ("solve", "unique", "consistency"),
         "surface_answer": ("respond", "write", "complete"),
         "surface_clue": ("plain", "compact", "deductive"),
+        "surface_response_envelope": (
+            "answer_block",
+            "solution_block",
+            "final_block",
+            "json",
+            "xml",
+            "yaml",
+        ),
     }
 
 

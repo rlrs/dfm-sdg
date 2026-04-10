@@ -654,18 +654,18 @@ def _answer_lines(
     if scenario == "queue":
         if language == "da":
             options = {
-                "respond": "Når du giver dit endelige svar, skal navnene stå fra forrest til bagerst, adskilt af kommaer.",
-                "write": "Når du skriver det endelige svar, skal navnene stå fra første til sidste plads i køen, adskilt af kommaer.",
-                "complete": "Giv den endelige kø fra forrest til bagerst som en kommasepareret liste.",
+                "respond": "Inde i det endelige svar skal navnene stå fra forrest til bagerst, adskilt af kommaer.",
+                "write": "Inde i det endelige svar skal navnene stå fra første til sidste plads i køen, adskilt af kommaer.",
+                "complete": "Selve svarindholdet skal være den endelige kø fra forrest til bagerst som en kommasepareret liste.",
             }
             return (
                 options[answer_variant],
                 f"Brug præcis {participant_count} navne. Format: {placeholder_format}",
             )
         options = {
-            "respond": "When you give your final answer, list the names from front to back, separated by commas.",
-            "write": "When you write the final answer, list the names from first to last position in the queue, separated by commas.",
-            "complete": "Give the final queue from front to back as a comma-separated list.",
+            "respond": "Inside the final response, list the names from front to back, separated by commas.",
+            "write": "Inside the final response, list the names from first to last position in the queue, separated by commas.",
+            "complete": "The answer content should be the final queue from front to back as a comma-separated list.",
         }
         return (
             options[answer_variant],
@@ -675,18 +675,18 @@ def _answer_lines(
     if scenario == "ranking":
         if language == "da":
             options = {
-                "respond": "Når du giver dit endelige svar, skal navnene stå fra bedste til dårligste placering, adskilt af kommaer.",
-                "write": "Når du skriver det endelige svar, skal navnene stå fra første til sidste plads, adskilt af kommaer.",
-                "complete": "Giv den endelige rangliste fra bedst til dårligst som en kommasepareret liste.",
+                "respond": "Inde i det endelige svar skal navnene stå fra bedste til dårligste placering, adskilt af kommaer.",
+                "write": "Inde i det endelige svar skal navnene stå fra første til sidste plads, adskilt af kommaer.",
+                "complete": "Selve svarindholdet skal være den endelige rangliste fra bedst til dårligst som en kommasepareret liste.",
             }
             return (
                 options[answer_variant],
                 f"Brug præcis {participant_count} navne. Format: {placeholder_format}",
             )
         options = {
-            "respond": "When you give your final answer, list the names from best place to worst place, separated by commas.",
-            "write": "When you write the final answer, list the names from first place to last place, separated by commas.",
-            "complete": "Give the final ranking from best to worst as a comma-separated list.",
+            "respond": "Inside the final response, list the names from best place to worst place, separated by commas.",
+            "write": "Inside the final response, list the names from first place to last place, separated by commas.",
+            "complete": "The answer content should be the final ranking from best to worst as a comma-separated list.",
         }
         return (
             options[answer_variant],
@@ -695,18 +695,18 @@ def _answer_lines(
 
     if language == "da":
         options = {
-            "respond": "Når du giver dit endelige svar, skal navnene stå i rækkefølge, adskilt af kommaer.",
-            "write": "Når du skriver det endelige svar, skal navnene stå i den korrekte rækkefølge, adskilt af kommaer.",
-            "complete": "Giv den endelige rækkefølge som en kommasepareret liste.",
+            "respond": "Inde i det endelige svar skal navnene stå i rækkefølge, adskilt af kommaer.",
+            "write": "Inde i det endelige svar skal navnene stå i den korrekte rækkefølge, adskilt af kommaer.",
+            "complete": "Selve svarindholdet skal være den endelige rækkefølge som en kommasepareret liste.",
         }
         return (
             options[answer_variant],
             f"Brug præcis {participant_count} navne. Format: {placeholder_format}",
         )
     options = {
-        "respond": "When you give your final answer, list the names in order, separated by commas.",
-        "write": "When you write the final answer, list the names in the correct order, separated by commas.",
-        "complete": "Give the final order as a comma-separated list.",
+        "respond": "Inside the final response, list the names in order, separated by commas.",
+        "write": "Inside the final response, list the names in the correct order, separated by commas.",
+        "complete": "The answer content should be the final order as a comma-separated list.",
     }
     return (
         options[answer_variant],

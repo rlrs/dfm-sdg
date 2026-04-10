@@ -1089,16 +1089,16 @@ def _answer_lines(
 
     if language == "da":
         first_line = {
-            "respond": f"Når du giver dit endelige svar, skal husoversigten have præcis {house_count} linjer i dette format:",
-            "write": f"Når du skriver det endelige svar, skal du bruge præcis {house_count} linjer i dette format:",
-            "complete": f"Giv den endelige husoversigt med præcis {house_count} linjer i dette format:",
+            "respond": f"Inde i det endelige svar skal husoversigten have præcis {house_count} linjer i dette format:",
+            "write": f"Inde i det endelige svar skal du bruge præcis {house_count} linjer i dette format:",
+            "complete": f"Selve svarindholdet skal være en husoversigt med præcis {house_count} linjer i dette format:",
         }[answer_variant]
         return (first_line, *numbered_lines)
 
     first_line = {
-        "respond": f"When you give your final answer, the house ledger should use exactly {house_count} lines in this format:",
-        "write": f"When you write the final answer, use exactly {house_count} lines in this format:",
-        "complete": f"Give the final house ledger using exactly {house_count} lines in this format:",
+        "respond": f"Inside the final response, the house ledger should use exactly {house_count} lines in this format:",
+        "write": f"Inside the final response, use exactly {house_count} lines in this format:",
+        "complete": f"The answer content should be a house ledger with exactly {house_count} lines in this format:",
     }[answer_variant]
     return (first_line, *numbered_lines)
 
