@@ -1,0 +1,7 @@
+name: eur_lex_sum
+description: Build Danish EUR-Lex summarization instruction rows.
+entrypoints:
+  build: sdg.packs.eur_lex_sum.build:build
+  verify: sdg.packs.eur_lex_sum.build:verify
+  summarize: sdg.packs.eur_lex_sum.build:summarize
+  publish: sdg.packs.eur_lex_sum.build:publish

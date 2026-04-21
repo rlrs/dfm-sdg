@@ -1,0 +1,17 @@
+pack: eur_lex_sum
+reuse_completed: false
+models:
+  instruction_writer:
+    endpoint: openai
+    max_concurrency: 50
+source:
+  dataset: oliverkinch/eur-lex-sum
+  config_name: da
+  split: train
+  text_field: da_document
+  summary_field: da_summary
+  id_field: celex_id
+generation:
+  min_document_chars: 400
+  temperature: 0.7
+  train_fraction: 0.9
