@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import re
 import sys
 from pathlib import Path
 from typing import Any
@@ -14,6 +13,7 @@ from sdg.commons.run import load, run
 from sdg.commons.run_log import log_event, write_snapshot
 from sdg.commons.utils import read_json, read_yaml, reports_root, write_json
 from sdg.commons.work_queue import map_async_ordered
+from sdg.packs.backtranslation.modes import ArticleMode, EurLexSumMode, mode_for_source
 
 
 def build(cfg: dict[str, Any]) -> BuildResult:
@@ -307,32 +307,9 @@ def _record_to_article(
     if summary_field:
         summary = _read_record_value(record, summary_field)
         if summary:
-            article["summary"] = _strip_eurlex_summary_header(summary)
+            article["summary"] = summary
 
     return article
-
-
-_EURLEX_SECTION_HEADER_RE = re.compile(
-    r"^(HVAD\b|INTRODUKTION\b|HOVEDPUNKTER\b)",
-    re.IGNORECASE,
-)
-
-
-def _strip_eurlex_summary_header(text: str) -> str:
-    """Strip the boilerplate header from EUR-Lex summary texts.
-
-    EUR-Lex summaries begin with a metadata block: a title line, a
-    'RESUMÉ' / 'RESUMÉ AF:' marker, and one or more legal citation lines.
-    The substantive content starts at the first all-caps section header
-    (e.g. 'HVAD ER FORMÅLET MED...', 'INTRODUKTION', 'HOVEDPUNKTER').
-    """
-    lines = text.splitlines()
-    for i, line in enumerate(lines):
-        if _EURLEX_SECTION_HEADER_RE.match(line.strip()):
-            return "\n".join(lines[i + 1:]).strip()
-    # No section header found — fall back to stripping just the title +
-    # RESUMÉ lines at the top so we don't return an empty string.
-    return text.strip()
 
 
 def _read_record_value(record: dict[str, Any], field_name: str | None) -> str | None:
@@ -371,6 +348,7 @@ def _make_rows(
         _make_rows_async(
             cfg=cfg,
             writer=writer,
+            mode=mode_for_source(cfg["source"]),
             dataset_path=dataset_path,
             failures_path=failures_path,
             processed_source_ids=processed_source_ids,
@@ -385,6 +363,7 @@ async def _make_rows_async(
     *,
     cfg: dict[str, Any],
     writer: LLM,
+    mode: ArticleMode | EurLexSumMode,
     dataset_path: Path,
     failures_path: Path,
     processed_source_ids: set[str],
@@ -425,6 +404,7 @@ async def _make_rows_async(
                 writer=writer,
                 temperature=temperature,
                 source=source,
+                mode=mode,
             ),
             concurrency=worker_concurrency,
             progress=progress,
@@ -463,65 +443,16 @@ async def _generate_row(
     writer: LLM,
     temperature: float,
     source: dict[str, Any],
+    mode: ArticleMode | EurLexSumMode,
 ) -> dict[str, Any]:
-    if "summary" in article:
-        return await _generate_summarization_row(
-            article=article,
-            writer=writer,
-            temperature=temperature,
-            source=source,
-        )
-
-    prompt = await _generate_prompt(writer, _instruction_messages(article), temperature=temperature)
-    cleaned_prompt = _clean_generated_prompt(prompt)
-    return {
-        "id": f"backtranslation-{article['row_index']:06d}",
-        "prompt": cleaned_prompt,
-        "target": article["text"],
-        "sources": [
-            _drop_none(
-                {
-                    "dataset": source.get("dataset"),
-                    "path": source.get("path"),
-                    "split": source.get("split", "train"),
-                    "row_id": article["source_id"],
-                    "title": article["title"],
-                    "url": article["url"],
-                }
-            )
-        ],
-        "meta": _drop_none(
-            {
-                "title": article["title"],
-                "source_id": article["source_id"],
-                "source_dataset": source.get("dataset"),
-                "source_path": source.get("path"),
-                "source_split": source.get("split", "train"),
-                "source_row_index": article["row_index"],
-                "target_chars": len(article["text"]),
-            }
-        ),
-    }
-
-
-async def _generate_summarization_row(
-    *,
-    article: dict[str, Any],
-    writer: LLM,
-    temperature: float,
-    source: dict[str, Any],
-) -> dict[str, Any]:
-    framing = await _generate_prompt(
-        writer,
-        _summarization_framing_messages(article["row_index"]),
-        temperature=temperature,
-    )
+    framing = await _generate_prompt(writer, mode.framing_messages(article), temperature=temperature)
     cleaned_framing = _clean_generated_prompt(framing)
-    assembled_prompt = _assemble_summarization_prompt(cleaned_framing, article["text"])
+    prompt = mode.assemble_prompt(cleaned_framing, article)
+    target = mode.target(article)
     return {
         "id": f"backtranslation-{article['row_index']:06d}",
-        "prompt": assembled_prompt,
-        "target": article["summary"],
+        "prompt": prompt,
+        "target": target,
         "sources": [
             _drop_none(
                 {
@@ -542,9 +473,8 @@ async def _generate_summarization_row(
                 "source_path": source.get("path"),
                 "source_split": source.get("split", "train"),
                 "source_row_index": article["row_index"],
-                "target_chars": len(article["summary"]),
-                "document_chars": len(article["text"]),
-                "mode": "summarization",
+                "target_chars": len(target),
+                **mode.meta_extra(article),
             }
         ),
     }
@@ -556,6 +486,7 @@ async def _generate_row_result(
     writer: LLM,
     temperature: float,
     source: dict[str, Any],
+    mode: ArticleMode | EurLexSumMode,
 ) -> dict[str, dict[str, Any]]:
     try:
         row = await _generate_row(
@@ -563,6 +494,7 @@ async def _generate_row_result(
             writer=writer,
             temperature=temperature,
             source=source,
+            mode=mode,
         )
     except Exception as error:
         log_event(
@@ -758,82 +690,6 @@ def _source_id_from_failure_row(row: dict[str, Any]) -> str | None:
     if not isinstance(source_id, str):
         return None
     return source_id
-
-
-def _instruction_messages(article: dict[str, Any]) -> list[dict[str, str]]:
-    user_lines = []
-    if article["title"]:
-        user_lines.append(f"Article title: {article['title']}")
-    user_lines.append("Article text:")
-    user_lines.append(article["text"])
-
-    return [
-        {
-            "role": "system",
-            "content": (
-                "Write a short prompt that would lead an LLM to generate something like the above, "
-                "don't be too specific. "
-                "Write the prompt in the same language as the article. "
-                "If using the title helps avoid getting too specific, mention the title directly. "
-                "Example of a good response: "
-                "\"Skriv en kort, informativ artikel om \\\"<titel>\\\". "
-                "Beskriv kort baggrund, indhold eller betydning. "
-                "Hold stilen neutral, let encyklopædisk og overskuelig.\""
-            ),
-        },
-        {
-            "role": "user",
-            "content": "\n".join(user_lines),
-        },
-    ]
-
-
-_SUMMARIZATION_STYLE_SEEDS = [
-    # structure: request-first
-    "Stil: direkte kommando, anmodning først. Eks: 'Opsummer følgende tekst:\\n\\n{{DOKUMENT}}'",
-    "Stil: høflig anmodning, anmodning først. Eks: 'Vil du hjælpe mig med at opsummere dette? {{DOKUMENT}}'",
-    "Stil: kontekstuel indledning, anmodning først. Eks: 'Jeg har et EU-dokument jeg gerne vil have et overblik over.\\n\\n{{DOKUMENT}}\\n\\nKan du give mig et resumé?'",
-    "Stil: konkret resumé-anmodning med længdebegrænsning, anmodning først. Eks: 'Kan du give mig et kort resumé af nedenstående på tre til fem sætninger?\\n\\n{{DOKUMENT}}'",
-    "Stil: faglig/formel, anmodning først. Eks: 'Udarbejd venligst et resumé af følgende juridiske dokument:\\n\\n{{DOKUMENT}}'",
-    # structure: document-first
-    "Stil: dokumentet først, kort afsluttende spørgsmål. Eks: '{{DOKUMENT}}\\n\\nHvad handler dette om?'",
-    "Stil: dokumentet først, opsummering bedt om til sidst. Eks: '{{DOKUMENT}}\\n\\nKan du opsummere det ovenstående for mig?'",
-    "Stil: dokumentet først, specifik resumé-anmodning til sidst. Eks: '{{DOKUMENT}}\\n\\nKan du skrive et kort resumé af ovenstående?'",
-    "Stil: dokumentet først, uformel/nysgerrig tone. Eks: '{{DOKUMENT}}\\n\\nHvad er essensen her?'",
-    # structure: document embedded mid-message
-    "Stil: dokument midt i, omgivet af kontekst. Eks: 'Jeg sidder med dette EU-dokument:\\n\\n{{DOKUMENT}}\\n\\nKan du give mig et hurtigt overblik?'",
-    "Stil: dokument midt i, med specifik opgaveformulering bagefter. Eks: 'Her er teksten:\\n\\n{{DOKUMENT}}\\n\\nSkriv et resumé på maksimalt 5 sætninger.'",
-    # terse / minimal
-    "Stil: meget kort og direkte, ingen kontekst. Eks: 'Resumér:\\n\\n{{DOKUMENT}}'",
-]
-
-
-def _summarization_framing_messages(row_index: int) -> list[dict[str, str]]:
-    style_seed = _SUMMARIZATION_STYLE_SEEDS[row_index % len(_SUMMARIZATION_STYLE_SEEDS)]
-    return [
-        {
-            "role": "system",
-            "content": (
-                "Du skriver brugerbesked-skabeloner til en dansk opsummeringsassistent. "
-                "Brugeren har et langt EU-juridisk dokument på dansk og ønsker det opsummeret.\n\n"
-                "Skriv én realistisk, naturlig besked en bruger kunne sende. "
-                "Placer markøren {{DOKUMENT}} præcis det sted i beskeden, hvor dokumentteksten skal indsættes. "
-                "Følg den angivne stil, men vær fri til at variere den præcise ordlyd. "
-                "Skriv KUN beskedskabelonen med {{DOKUMENT}}-markøren, intet andet."
-            ),
-        },
-        {
-            "role": "user",
-            "content": style_seed,
-        },
-    ]
-
-
-def _assemble_summarization_prompt(framing: str, document_text: str) -> str:
-    if "{{DOKUMENT}}" in framing:
-        return framing.replace("{{DOKUMENT}}", document_text)
-    # fallback: LLM used wrong placeholder or omitted it — append document
-    return framing.rstrip() + "\n\n" + document_text
 
 
 def _clean_generated_prompt(value: str) -> str:
