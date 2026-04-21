@@ -6,11 +6,14 @@ from pathlib import Path
 from typing import Any
 
 from sdg.commons import Artifact, BuildResult, store
+from sdg.commons import concurrency as common_concurrency
 from sdg.commons import eval as common_eval
+from sdg.commons import progress as common_progress
 from sdg.commons import publish as common_publish
+from sdg.commons import sources as common_sources
 from sdg.commons.model import LLM, load_clients
 from sdg.commons.run import load, run
-from sdg.commons.run_log import log_event, write_snapshot
+from sdg.commons.run_log import log_event
 from sdg.commons.utils import read_json, read_yaml, reports_root, write_json
 from sdg.commons.work_queue import map_async_ordered
 
@@ -174,7 +177,7 @@ def _build_run(
             kind="jsonl",
             meta={
                 "rows": completed_rows,
-                "source": _source_label(cfg["source"]),
+                "source": common_sources.source_label(cfg["source"]),
                 "generation_failures": failed_rows,
                 **source_stats,
             },
@@ -205,7 +208,7 @@ def _count_articles(
     pending_rows = 0
     kept_rows = 0
 
-    for record in _iter_source_records(source):
+    for record in common_sources.iter_source_records(source):
         scanned_rows += 1
         article = _record_to_article(record, source, scanned_rows - 1)
         if article is None:
@@ -248,7 +251,7 @@ def _iter_articles(
     max_articles = _max_articles(generation)
     kept_rows = 0
 
-    for index, record in enumerate(_iter_source_records(source)):
+    for index, record in enumerate(common_sources.iter_source_records(source)):
         article = _record_to_article(record, source, index)
         if article is None:
             continue
@@ -260,35 +263,19 @@ def _iter_articles(
         if article["source_id"] in processed_source_ids:
             continue
         yield article
-
-
-def _iter_source_records(source: dict[str, Any]):
-    path = source.get("path")
-    if path:
-        return store.read_jsonl(Path(path).expanduser().resolve())
-
-    from datasets import load_dataset
-
-    return load_dataset(
-        path=source["dataset"],
-        name=source.get("config_name"),
-        split=source.get("split", "train"),
-    )
-
-
 def _record_to_article(
     record: dict[str, Any],
     source: dict[str, Any],
     index: int,
 ) -> dict[str, Any] | None:
-    text = _read_record_value(record, source.get("text_field", "text"))
+    text = common_sources.read_record_value(record, source.get("text_field", "text"))
     if not text:
         return None
 
-    title = _read_record_value(record, source.get("title_field", "title"))
-    url = _read_record_value(record, source.get("url_field", "url"))
+    title = common_sources.read_record_value(record, source.get("title_field", "title"))
+    url = common_sources.read_record_value(record, source.get("url_field", "url"))
     source_id = (
-        _read_record_value(record, source.get("id_field"))
+        common_sources.read_record_value(record, source.get("id_field"))
         or url
         or title
         or str(index)
@@ -301,22 +288,6 @@ def _record_to_article(
         "text": text,
         "url": url,
     }
-
-
-def _read_record_value(record: dict[str, Any], field_name: str | None) -> str | None:
-    if not field_name:
-        return None
-
-    value = record.get(field_name)
-    if value is None:
-        return None
-
-    text = str(value).strip()
-    if not text:
-        return None
-    return text
-
-
 def _load_instruction_writer(cfg: dict[str, Any]) -> LLM:
     models = load_clients({"instruction_writer": cfg["models"]["instruction_writer"]})
     writer = models["instruction_writer"]
@@ -363,7 +334,7 @@ async def _make_rows_async(
     generation = cfg["generation"]
     temperature = float(generation.get("temperature", 0.2))
     source = cfg["source"]
-    worker_concurrency = _writer_concurrency(writer)
+    worker_concurrency = common_concurrency.runtime_concurrency(writer)
     completed_rows = 0
     failed_rows = 0
     starting_processed_rows = starting_completed_rows + starting_failed_rows
@@ -521,13 +492,6 @@ async def _generate_prompt(
 
     assert last_error is not None
     raise last_error
-
-
-def _writer_concurrency(writer: LLM) -> int:
-    runtime = getattr(writer, "runtime", None)
-    return max(int(getattr(runtime, "max_concurrency", 1)), 1)
-
-
 def _max_articles(generation: dict[str, Any]) -> int | None:
     value = generation.get("max_articles")
     if value is None:
@@ -549,26 +513,34 @@ def _progress_reporter(
     worker_concurrency: int,
 ):
     state = {"finished": False, "elapsed_seconds": 0}
-    _write_progress_snapshot(
+    common_progress.write_progress_snapshot(
+        "backtranslation_progress",
         stage="generating_prompts",
         completed=starting_completed,
         total=total,
         elapsed_seconds=0,
-        worker_concurrency=worker_concurrency,
+        extra={
+            "worker_concurrency": worker_concurrency,
+            "rows_per_minute": common_progress.items_per_minute(starting_completed, 0),
+        },
         force=True,
     )
     _print_progress_bar(starting_completed, total, worker_concurrency, 0)
+    snapshot_progress = common_progress.snapshot_progress_reporter(
+        "backtranslation_progress",
+        stage="generating_prompts",
+        completed_offset=starting_completed,
+        total=total,
+        extra=lambda completed, _total, elapsed: {
+            "worker_concurrency": worker_concurrency,
+            "rows_per_minute": common_progress.items_per_minute(completed, elapsed),
+        },
+    )
 
     def report(completed: int, _reported_total: int | None, elapsed: int) -> None:
         state["elapsed_seconds"] = elapsed
         current_completed = starting_completed + completed
-        _write_progress_snapshot(
-            stage="generating_prompts",
-            completed=current_completed,
-            total=total,
-            elapsed_seconds=elapsed,
-            worker_concurrency=worker_concurrency,
-        )
+        snapshot_progress(completed, _reported_total, elapsed)
         _print_progress_bar(current_completed, total, worker_concurrency, elapsed)
         if current_completed >= total and not state["finished"]:
             sys.stdout.write("\n")
@@ -584,41 +556,17 @@ def _finish_progress(
     worker_concurrency: int,
     elapsed_seconds: int,
 ) -> None:
-    _write_progress_snapshot(
+    common_progress.write_progress_snapshot(
+        "backtranslation_progress",
         stage="completed",
         completed=total,
         total=total,
         elapsed_seconds=elapsed_seconds,
-        worker_concurrency=worker_concurrency,
-        force=True,
-    )
-
-
-def _write_progress_snapshot(
-    *,
-    stage: str,
-    completed: int,
-    total: int,
-    elapsed_seconds: int | None,
-    worker_concurrency: int,
-    force: bool = False,
-) -> None:
-    elapsed = elapsed_seconds
-    rows_per_minute = 0.0
-    if elapsed > 0:
-        rows_per_minute = round(completed * 60 / elapsed, 2)
-    write_snapshot(
-        "backtranslation_progress.json",
-        {
-            "stage": stage,
-            "completed": completed,
-            "total": total,
-            "elapsed_seconds": elapsed,
+        extra={
             "worker_concurrency": worker_concurrency,
-            "rows_per_minute": rows_per_minute,
+            "rows_per_minute": common_progress.items_per_minute(total, elapsed_seconds),
         },
-        force=force,
-        min_interval_seconds=1.0,
+        force=True,
     )
 
 
@@ -784,13 +732,5 @@ def _load_or_compute(path: Path, fallback: dict[str, Any]) -> dict[str, Any]:
     if path.exists():
         return read_json(path)
     return fallback
-
-
-def _source_label(source: dict[str, Any]) -> str:
-    if source.get("dataset"):
-        return str(source["dataset"])
-    return str(source["path"])
-
-
 def _drop_none(value: dict[str, Any]) -> dict[str, Any]:
     return {key: item for key, item in value.items() if item is not None}

@@ -6,6 +6,8 @@ from pathlib import Path
 from typing import Any, TypedDict
 
 from sdg.commons import Artifact, store
+from sdg.commons import concurrency as common_concurrency
+from sdg.commons import progress as common_progress
 from sdg.commons import publish as common_publish
 from sdg.commons.model import LLM, load_clients
 from sdg.commons.run_log import log_event, write_snapshot
@@ -93,9 +95,6 @@ class FamilyProgressTracker:
         elapsed = elapsed_seconds
         if elapsed is None:
             elapsed = int(time.monotonic() - self.started_at)
-        candidates_per_minute = 0.0
-        if elapsed > 0:
-            candidates_per_minute = round(self.candidate_rows * 60 / elapsed, 2)
         write_snapshot(
             self.snapshot_name,
             {
@@ -108,7 +107,7 @@ class FamilyProgressTracker:
                 "rows": self.rows,
                 "rejected_rows": self.rejected_rows,
                 "reject_reasons": dict(sorted(self.reject_reasons.items())),
-                "candidates_per_minute": candidates_per_minute,
+                "candidates_per_minute": common_progress.items_per_minute(self.candidate_rows, elapsed),
             },
             force=force,
             min_interval_seconds=1.0,
@@ -145,16 +144,6 @@ def progress_reporter(
         next_log["count"] = completed + max(1, total // 10)
 
     return report
-
-
-def worker_concurrency(models: dict[str, LLM]) -> int:
-    limits = [
-        getattr(getattr(model, "runtime", None), "max_concurrency", 1)
-        for model in models.values()
-    ]
-    return max(limits)
-
-
 def load_family_models(cfg: dict[str, Any], *, family: str) -> dict[str, LLM]:
     model_refs = cfg.get("models", {})
     required_roles = ["query_teacher", "answer_teacher", "judge"]
@@ -254,7 +243,7 @@ async def write_family_outputs_async(
     rows_path = outputs_dir / f"{family}_rows.jsonl"
     candidate_path = outputs_dir / f"{family}_candidates.jsonl"
     rejected_path = outputs_dir / f"{family}_rejected.jsonl"
-    current_worker_concurrency = worker_concurrency(models)
+    current_worker_concurrency = common_concurrency.effective_concurrency(models.values())
     resume_state = load_resume_state(outputs_dir, family=family)
     stats = dict(resume_state["stats"])
     tracker = FamilyProgressTracker(

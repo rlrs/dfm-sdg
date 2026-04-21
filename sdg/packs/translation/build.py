@@ -12,6 +12,7 @@ import yaml
 from sdg.commons import Artifact, BuildResult, store
 from sdg.commons import eval as common_eval
 from sdg.commons import publish as common_publish
+from sdg.commons import sources as common_sources
 from sdg.commons.run import load, run
 from sdg.commons.utils import read_json, read_yaml, reports_root, write_json
 
@@ -427,7 +428,7 @@ def _build_run(
                 "long_text_variant_count_by_config": long_text_variant_count_by_config,
                 "template_pool_counts_by_config": template_pool_counts_by_config,
                 "source": (
-                    _source_label(source_entries[0]["source"])
+                    common_sources.source_label(source_entries[0]["source"])
                     if len(source_entries) == 1
                     else None
                 ),
@@ -446,7 +447,7 @@ def _iter_translation_pairs(entry: dict[str, Any]):
     kept_pairs = 0
     kept_pairs_by_source: dict[str, int] = {}
 
-    for index, record in enumerate(_iter_source_records(source)):
+    for index, record in enumerate(common_sources.iter_source_records(source, default_streaming=True)):
         pair = _record_to_pair(record, source, index)
         if pair is None:
             continue
@@ -467,35 +468,18 @@ def _iter_translation_pairs(entry: dict[str, Any]):
             kept_pairs_by_source[source_label] = current_source_pairs + 1
         if max_pairs is not None and kept_pairs >= max_pairs:
             break
-
-
-def _iter_source_records(source: dict[str, Any]):
-    path = source.get("path")
-    if path:
-        return store.iter_jsonl(Path(path).expanduser().resolve())
-
-    from datasets import load_dataset
-
-    return load_dataset(
-        path=source["dataset"],
-        name=source.get("config_name"),
-        split=source.get("split", "train"),
-        streaming=bool(source.get("streaming", True)),
-    )
-
-
 def _record_to_pair(
     record: dict[str, Any],
     source: dict[str, Any],
     index: int,
 ) -> dict[str, Any] | None:
-    danish = _read_record_value(record, source.get("danish_field", "danish"))
-    english = _read_record_value(record, source.get("english_field", "english"))
+    danish = common_sources.read_record_value(record, source.get("danish_field", "danish"))
+    english = common_sources.read_record_value(record, source.get("english_field", "english"))
     if not danish or not english:
         return None
 
-    source_id = _read_record_value(record, source.get("id_field")) or str(index)
-    origin = _read_record_value(record, source.get("origin_field", "source"))
+    source_id = common_sources.read_record_value(record, source.get("id_field")) or str(index)
+    origin = common_sources.read_record_value(record, source.get("origin_field", "source"))
     danish_chars = len(danish)
     english_chars = len(english)
 
@@ -509,26 +493,6 @@ def _record_to_pair(
         "english_chars": english_chars,
         "pair_max_chars": max(danish_chars, english_chars),
     }
-
-
-def _read_record_value(record: dict[str, Any], field_name: str | None) -> str | None:
-    if not field_name:
-        return None
-
-    value: Any = record
-    for part in field_name.split("."):
-        if not isinstance(value, dict):
-            return None
-        value = value.get(part)
-        if value is None:
-            return None
-
-    text = str(value).strip()
-    if not text:
-        return None
-    return text
-
-
 def _row_for_pair(
     pair: dict[str, Any],
     entry: dict[str, Any],
@@ -1211,13 +1175,5 @@ def _load_or_compute(path: Path, fallback: dict[str, Any]) -> dict[str, Any]:
     if path.exists():
         return read_json(path)
     return fallback
-
-
-def _source_label(source: dict[str, Any]) -> str:
-    if source.get("dataset"):
-        return str(source["dataset"])
-    return str(source["path"])
-
-
 def _drop_none(value: dict[str, Any]) -> dict[str, Any]:
     return {key: item for key, item in value.items() if item is not None}

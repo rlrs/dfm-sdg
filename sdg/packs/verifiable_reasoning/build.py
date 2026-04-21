@@ -9,9 +9,11 @@ from random import Random
 from typing import Any
 
 from sdg.commons import Artifact, BuildResult, store
+from sdg.commons import concurrency as common_concurrency
 from sdg.commons import diversity as common_diversity
 from sdg.commons import eval as common_eval
 from sdg.commons import model as common_model
+from sdg.commons import progress as common_progress
 from sdg.commons import publish as common_publish
 from sdg.commons.run import load, run
 from sdg.commons.run_log import log_event, write_snapshot
@@ -663,7 +665,7 @@ def _answer_teacher_settings(cfg: dict[str, Any]) -> tuple[object, float, int, i
     temperature = float(generation.get("answer_temperature", 0.0))
     max_attempts = int(generation.get("max_answer_attempts", 3))
     assert max_attempts > 0, "generation.max_answer_attempts must be positive"
-    concurrency = _teacher_concurrency(teacher)
+    concurrency = common_concurrency.runtime_concurrency(teacher)
     max_tokens = int(generation.get("answer_max_tokens", ANSWER_TEACHER_MAX_TOKENS))
     assert max_tokens > 0, "generation.answer_max_tokens must be positive"
     return teacher, temperature, max_attempts, concurrency, max_tokens
@@ -2056,21 +2058,27 @@ def _reasoning_step_count(text: str) -> int:
     return len(steps)
 
 
-def _teacher_concurrency(teacher) -> int:
-    return max(1, int(getattr(getattr(teacher, "runtime", None), "max_concurrency", 1)))
-
-
 def _target_attachment_progress(*, offset: int, total: int):
-    def progress(completed: int, _total: int | None, elapsed: int) -> None:
+    progress = common_progress.snapshot_progress_reporter(
+        "verifiable_reasoning_answer_teacher",
+        stage="attaching_targets",
+        completed_offset=offset,
+        total=total,
+    )
+
+    def report(completed: int, reported_total: int | None, elapsed: int) -> None:
+        progress(completed, reported_total, elapsed)
+        if offset + completed != total:
+            return
         write_snapshot(
             "verifiable_reasoning_answer_teacher",
             {
                 "stage": "attaching_targets",
-                "completed": offset + completed,
+                "completed": total,
                 "total": total,
                 "elapsed_seconds": elapsed,
             },
-            force=offset + completed == total,
+            force=True,
         )
 
-    return progress
+    return report
