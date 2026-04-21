@@ -1,0 +1,82 @@
+pack: translation
+reuse_completed: false
+sources:
+  - name: machine-translation-da-en
+    source:
+      dataset: oliverkinch/machine-translation-da-en
+      split: train
+      streaming: true
+      danish_field: danish
+      english_field: english
+      origin_field: source
+    generation:
+      max_pairs: 100447
+      max_pairs_per_source: 4300
+      prompt_languages:
+        - da
+        - en
+      directions:
+        - da-en
+        - en-da
+      template_styles:
+        - translate_into
+        - from_to
+        - translator_role
+        - strict_instructions
+        - minimal_output
+        - marked_text_only
+        - json_field_only
+        - json_object_output
+        - json_object_meta_output
+        - json_object_source_output
+        - xml_output
+        - xml_meta_output
+        - yaml_output
+        - yaml_meta_output
+        - yaml_source_output
+        - json_string_output
+      train_fraction: 0.9
+  - name: eur-lex
+    source:
+      dataset: oliverkinch/eur-lex
+      config_name: default
+      split: train
+      streaming: true
+      danish_field: text_da
+      english_field: text_en
+      id_field: celex
+      origin_field: resource_type
+    generation:
+      max_pairs: 25000
+      max_pair_chars: 50000
+      long_text_threshold_chars: 8000
+      prompt_languages:
+        - da
+        - en
+      directions:
+        - da-en
+        - en-da
+      template_styles:
+        - translate_into
+        - from_to
+        - translator_role
+        - strict_instructions
+        - minimal_output
+        - marked_text_only
+        - json_field_only
+        - json_object_output
+        - json_object_meta_output
+        - json_object_source_output
+        - xml_output
+        - xml_meta_output
+        - yaml_output
+        - yaml_meta_output
+        - yaml_source_output
+        - json_string_output
+      long_text_template_styles:
+        - translate_into
+        - from_to
+        - translator_role
+        - strict_instructions
+        - minimal_output
+      train_fraction: 0.9

@@ -9,6 +9,7 @@ It keeps the shared layer thin and puts method-specific logic in packs.
 - `sdg/commons/`: shared runtime code for runs, artifacts, model clients, publishing, viewer support, and pack discovery
 - `sdg/packs/demo/`: tiny reference pack showing the full flow end to end
 - `sdg/packs/backtranslation/`: backtranslation-style data generation from finished texts
+- `sdg/packs/translation/`: translation prompt-surface generation from Danish-English parallel corpora
 - `sdg/packs/synth/`: the main synthesis pack for memory-core building, memorization, grounded QA, and related workflows
 - `sdg/packs/verifiable_reasoning/`: starter scaffold for exactly checkable reasoning families, starting with logic puzzles
 - `sdg/packs/tool_use/`: starter scaffold for structured tool-calling rows and validators
@@ -26,6 +27,7 @@ uv sync --dev
 uv run sdg list-packs
 uv run sdg build sdg/packs/demo/configs/base.yaml
 uv run sdg build sdg/packs/backtranslation/configs/base.yaml
+uv run sdg build sdg/packs/translation/configs/base.yaml
 uv run sdg build sdg/packs/synth/configs/smoke.yaml
 uv run sdg build sdg/packs/verifiable_reasoning/configs/base.yaml
 uv run sdg build sdg/packs/tool_use/configs/base.yaml

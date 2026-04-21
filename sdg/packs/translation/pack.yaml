@@ -1,0 +1,7 @@
+name: translation
+description: Build Danish-English translation instruction rows from parallel corpora.
+entrypoints:
+  build: sdg.packs.translation.build:build
+  verify: sdg.packs.translation.build:verify
+  summarize: sdg.packs.translation.build:summarize
+  publish: sdg.packs.translation.build:publish
