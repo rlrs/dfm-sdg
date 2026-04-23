@@ -1,0 +1,13 @@
+pack: instruction_following
+seed: 7
+reuse_completed: true
+models:
+  scenario_writer: openai
+generation:
+  count: 24
+  languages: [en, da]
+  interaction_style: multi_turn_isolation
+  min_constraints: 2
+  max_constraints: 4
+  scenario_temperature: 0.4
+  train_fraction: 0.8

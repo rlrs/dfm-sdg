@@ -781,6 +781,23 @@ def _post_json(
                 status_code = error.response.status_code
             else:
                 status_code = None
+            if _is_retryable_request_error(error) and attempt < runtime.max_retries:
+                delay = runtime.retry_delay(httpx.Headers(), attempt=attempt)
+                runtime.extend_backoff(delay)
+                _record_model_retry(request_label, endpoint, status_code)
+                _emit_model_event(
+                    "request_retry",
+                    request_id=request_id,
+                    request_label=request_label,
+                    endpoint=endpoint,
+                    attempt=attempt + 1,
+                    delay_seconds=delay,
+                    status_code=status_code,
+                    error_type=error.__class__.__name__,
+                    error_message=str(error),
+                    runtime=runtime,
+                )
+                continue
             _record_model_finished(
                 request_label,
                 endpoint,
@@ -903,6 +920,23 @@ async def _apost_json(
                 status_code = error.response.status_code
             else:
                 status_code = None
+            if _is_retryable_request_error(error) and attempt < runtime.max_retries:
+                delay = runtime.retry_delay(httpx.Headers(), attempt=attempt)
+                runtime.extend_backoff(delay)
+                _record_model_retry(request_label, endpoint, status_code)
+                _emit_model_event(
+                    "request_retry",
+                    request_id=request_id,
+                    request_label=request_label,
+                    endpoint=endpoint,
+                    attempt=attempt + 1,
+                    delay_seconds=delay,
+                    status_code=status_code,
+                    error_type=error.__class__.__name__,
+                    error_message=str(error),
+                    runtime=runtime,
+                )
+                continue
             _record_model_finished(
                 request_label,
                 endpoint,
@@ -1277,6 +1311,17 @@ def _average_duration(total_duration_ms: int, completed_requests: int) -> float:
 
 def _duration_ms(started_at: float) -> int:
     return int((time.monotonic() - started_at) * 1000)
+
+
+def _is_retryable_request_error(error: Exception) -> bool:
+    return isinstance(
+        error,
+        (
+            TimeoutError,
+            httpx.TimeoutException,
+            httpx.TransportError,
+        ),
+    )
 
 
 def _response_headers(headers: httpx.Headers) -> dict[str, str | None]:

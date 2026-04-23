@@ -1,0 +1,7 @@
+name: instruction_following
+description: General verifiable instruction-following pack for expanded IFBench-style rows.
+entrypoints:
+  build: sdg.packs.instruction_following.build:build
+  verify: sdg.packs.instruction_following.build:verify
+  summarize: sdg.packs.instruction_following.build:summarize
+  publish: sdg.packs.instruction_following.build:publish

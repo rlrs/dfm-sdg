@@ -1,0 +1,31 @@
+pack: instruction_following
+seed: 7
+reuse_completed: true
+models:
+  scenario_writer: openai
+  answer_teacher: openai
+generation:
+  count: 24
+  languages: [da]
+  interaction_styles: [single_turn, multi_turn_isolation]
+  interaction_style_weights:
+    single_turn: 4
+    multi_turn_isolation: 1
+  min_constraints: 2
+  max_constraints: 4
+  attach_targets: true
+  scenario_temperature: 0.4
+  answer_temperature: 0.7
+  train_fraction: 0.8
+  prompt_sources:
+    da:
+      dataset: danish-foundation-models/laerebogen
+      config_name: base
+      split: train
+      streaming: true
+      prompt_field: instruction
+      min_chars: 40
+      max_chars: 700
+      max_lines: 10
+      max_records: 200000
+      max_prompts: 50000

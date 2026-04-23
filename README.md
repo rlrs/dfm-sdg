@@ -12,6 +12,7 @@ It keeps the shared layer thin and puts method-specific logic in packs.
 - `sdg/packs/translation/`: translation prompt-surface generation from Danish-English parallel corpora
 - `sdg/packs/synth/`: the main synthesis pack for memory-core building, memorization, grounded QA, and related workflows
 - `sdg/packs/verifiable_reasoning/`: starter scaffold for exactly checkable reasoning families, starting with logic puzzles
+- `sdg/packs/instruction_following/`: expanded IFBench-style instruction-following rows with deterministic verification
 - `sdg/packs/tool_use/`: starter scaffold for structured tool-calling rows and validators
 - `sdg/packs/python_algorithms/`: starter scaffold for code-generation tasks with executable checks
 - `tests/`: pack tests and shared runtime tests
@@ -30,6 +31,7 @@ uv run sdg build sdg/packs/backtranslation/configs/base.yaml
 uv run sdg build sdg/packs/translation/configs/base.yaml
 uv run sdg build sdg/packs/synth/configs/smoke.yaml
 uv run sdg build sdg/packs/verifiable_reasoning/configs/base.yaml
+uv run sdg build sdg/packs/instruction_following/configs/ifbench.yaml
 uv run sdg build sdg/packs/tool_use/configs/base.yaml
 uv run sdg build sdg/packs/python_algorithms/configs/base.yaml
 ```

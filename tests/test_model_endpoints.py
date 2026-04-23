@@ -465,6 +465,7 @@ def test_async_model_request_uses_hard_timeout(tmp_path) -> None:
         model="test-model",
         base_url="https://example.com/v1",
         timeout_seconds=0.01,
+        max_retries=0,
         async_transport=HangingAsyncTransport(),
     )
 
@@ -488,3 +489,52 @@ def test_async_model_request_uses_hard_timeout(tmp_path) -> None:
     failed_events = [row for row in events if row["component"] == "model" and row["event"] == "request_failed"]
     assert failed_events
     assert failed_events[0]["data"]["error_type"] == "TimeoutError"
+
+
+def test_async_model_retries_timeout_and_succeeds(tmp_path) -> None:
+    class FlakyAsyncTransport(httpx.AsyncBaseTransport):
+        def __init__(self) -> None:
+            self.calls = 0
+
+        async def handle_async_request(self, request: httpx.Request) -> httpx.Response:
+            self.calls += 1
+            if self.calls == 1:
+                await asyncio.sleep(10)
+            return httpx.Response(
+                200,
+                json={"choices": [{"message": {"content": '{"target":"ok"}'}}]},
+                request=request,
+            )
+
+    run_dir = tmp_path / "run"
+    run_dir.mkdir(parents=True)
+    llm = LLM(
+        model="test-model",
+        base_url="https://example.com/v1",
+        timeout_seconds=0.01,
+        max_retries=1,
+        min_backoff_seconds=0.0,
+        max_backoff_seconds=0.0,
+        async_transport=FlakyAsyncTransport(),
+    )
+
+    async def run_request() -> str:
+        with activate_run_log(run_dir):
+            return await llm.achat([{"role": "user", "content": "hello"}], temperature=0.0)
+
+    assert asyncio.run(run_request()) == '{"target":"ok"}'
+
+    metrics = json.loads((run_dir / "outputs" / "model_metrics.json").read_text())
+    assert metrics["totals"]["requests_started"] == 1
+    assert metrics["totals"]["requests_succeeded"] == 1
+    assert metrics["totals"]["requests_failed"] == 0
+    assert metrics["totals"]["request_retries"] == 1
+
+    events = [
+        json.loads(line)
+        for line in (run_dir / "logs" / "events.jsonl").read_text().splitlines()
+        if line.strip()
+    ]
+    event_names = [row["event"] for row in events if row["component"] == "model"]
+    assert "request_retry" in event_names
+    assert "request_finished" in event_names
