@@ -693,6 +693,10 @@ def _instruction_messages(article: dict[str, Any]) -> list[dict[str, str]]:
     system_lines = [
         "Du er en assistent der laver træningsdata til sprogmodeller.",
         "Du svarer KUN med selve prompten — ingen forklaringer, overskrifter eller meta-kommentarer.",
+        "Prompten skal være selvstændig og må IKKE referere til specifikke artikler, dokumenter "
+        "eller tekster der ikke er vedlagt — ingen 'disse artikler', 'ovenstående tekst', "
+        "'nedenstående dokument', 'de tre artikler' eller lignende. "
+        "Prompten skal beskrive hvad brugeren ønsker skrevet, ikke hvad brugeren ønsker præsenteret.",
     ]
     if journal_description:
         system_lines.append(f"\nTidsskriftets beskrivelse: {journal_description}")
@@ -729,6 +733,8 @@ def _clean_generated_prompt(value: str) -> str:
     if text.startswith('"') and text.endswith('"') and len(text) >= 2:
         text = text[1:-1].strip()
     return text
+
+
 
 
 def _extract_passages(
