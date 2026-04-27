@@ -213,16 +213,20 @@ def _build_run(
 ) -> dict[str, Artifact]:
     plan = _create_plan(cfg, seed)
     plan_path = write_json(plan, outputs_dir / "plan.json")
-    rows = _generate_rows(plan, cfg)
-    dataset_path = store.write_jsonl(rows, outputs_dir / "dataset.jsonl")
-    common_publish.write_preview(rows, outputs_dir / "sample_preview.jsonl", n=20)
+    dataset_path = _write_dataset(plan, cfg, outputs_dir)
+    row_count = store.jsonl_count(dataset_path)
+    common_publish.write_preview(
+        store.jsonl_prefix(dataset_path, limit=20),
+        outputs_dir / "sample_preview.jsonl",
+        n=20,
+    )
 
     return {
         "dataset": Artifact(
             name="dataset",
             path=str(dataset_path),
             kind="jsonl",
-            meta={"rows": len(rows), "family": "instruction_following"},
+            meta={"rows": row_count, "family": "instruction_following"},
         ),
         "plan": Artifact(
             name="plan",
@@ -486,6 +490,57 @@ def _generate_rows(plan: dict[str, Any], cfg: dict[str, Any]) -> list[dict[str, 
     )
 
 
+def _write_dataset(
+    plan: dict[str, Any],
+    cfg: dict[str, Any],
+    outputs_dir: Path,
+) -> Path:
+    dataset_path = outputs_dir / "dataset.jsonl"
+    row_plans = list(plan["rows"])
+    completed = store.jsonl_count(dataset_path)
+
+    assert completed <= len(row_plans), "dataset.jsonl has more rows than the saved plan"
+    if completed == len(row_plans):
+        return dataset_path
+
+    _stream_rows(row_plans, cfg, dataset_path, completed=completed)
+
+    final_count = store.jsonl_count(dataset_path)
+    assert final_count == len(row_plans), "dataset.jsonl row count does not match the saved plan"
+    return dataset_path
+
+
+def _stream_rows(
+    row_plans: list[dict[str, Any]],
+    cfg: dict[str, Any],
+    dataset_path: Path,
+    *,
+    completed: int,
+) -> None:
+    writer = _load_scenario_writer(cfg)
+    answer_teacher = _load_answer_teacher(cfg)
+    generation = cfg["generation"]
+    scenario_temperature = float(generation.get("scenario_temperature", generation.get("temperature", 0.4)))
+    answer_temperature = float(generation.get("answer_temperature", generation.get("temperature", 0.7)))
+
+    asyncio.run(
+        _stream_rows_async(
+            row_plans[completed:],
+            dataset_path=dataset_path,
+            start_index=completed,
+            writer=writer,
+            answer_teacher=answer_teacher,
+            scenario_temperature=scenario_temperature,
+            answer_temperature=answer_temperature,
+            concurrency=_row_generation_concurrency(
+                generation,
+                writer=writer,
+                answer_teacher=answer_teacher,
+            ),
+        )
+    )
+
+
 async def _generate_rows_async(
     row_plans: list[dict[str, Any]],
     *,
@@ -524,6 +579,47 @@ async def _generate_rows_async(
         rows.append(row)
 
     return rows
+
+
+async def _stream_rows_async(
+    row_plans: list[dict[str, Any]],
+    *,
+    dataset_path: Path,
+    start_index: int,
+    writer: LLM,
+    answer_teacher: LLM | None,
+    scenario_temperature: float,
+    answer_temperature: float,
+    concurrency: int,
+) -> None:
+    async def worker(index: int, row_plan: dict[str, Any]) -> dict[str, Any]:
+        row_index = start_index + index
+        try:
+            return await _generate_row_async(
+                row_index,
+                row_plan,
+                writer=writer,
+                answer_teacher=answer_teacher,
+                scenario_temperature=scenario_temperature,
+                answer_temperature=answer_temperature,
+            )
+        except Exception as error:
+            return _failed_row(
+                row_index,
+                row_plan,
+                writer=writer,
+                error=error,
+            )
+
+    mode = "a" if dataset_path.exists() else "w"
+    with dataset_path.open(mode) as handle:
+        async for row in map_async_ordered(
+            row_plans,
+            worker,
+            concurrency=concurrency,
+            total=len(row_plans),
+        ):
+            store.append_jsonl_line(handle, row)
 
 
 def _row_generation_concurrency(
