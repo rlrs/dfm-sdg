@@ -39,106 +39,14 @@ _EN_STOP = frozenset(
      "an", "which", "were", "been", "their"]
 )
 
-# Style seeds cycle across passages to maximise prompt diversity.
-# Each seed is a (task_instruction_academic, task_instruction_creative) pair.
-# The task instruction is shown to the LLM after the passage; it describes the desired
-# prompt *style* via a concrete example so the model imitates the pattern rather than
-# generating yet another "Skriv en akademisk tekst om…" opening.
-_STYLE_SEEDS: list[tuple[str, str]] = [
-    # 0 — terse direct command
-    (
-        "Stil: kort, direkte kommando uden kontekst.\n"
-        'Eksempel: "Skriv en akademisk artikel om mediernes rolle i demokratiet med en analytisk tone."',
-        "Stil: kort, direkte kommando uden kontekst.\n"
-        'Eksempel: "Skriv et melankolsk prosadigt om tab og erindring."',
-    ),
-    # 1 — polite short request
-    (
-        "Stil: høflig, kort anmodning.\n"
-        'Eksempel: "Kan du skrive et akademisk afsnit om klimapolitikkens udfordringer?"',
-        "Stil: høflig, kort anmodning.\n"
-        'Eksempel: "Kan du skrive en lille poetisk tekst om ensomhed i en storby?"',
-    ),
-    # 2 — user gives context first, then asks
-    (
-        "Stil: brugeren forklarer kort hvad de arbejder med, og beder derefter om hjælp.\n"
-        'Eksempel: "Jeg skriver en opgave om velfærdsstaten og mangler et analytisk afsnit om '
-        'universelle ydelser. Kan du hjælpe mig med at formulere noget i en akademisk stil?"',
-        "Stil: brugeren forklarer kort hvad de arbejder med, og beder derefter om hjælp.\n"
-        'Eksempel: "Jeg er ved at skrive en samling digte og mangler et stykke om '
-        'barndomsminder. Kan du skrive noget i en lyrisk, drømmende tone?"',
-    ),
-    # 3 — informal, slightly rambling, then asks
-    (
-        "Stil: uformel og lidt omstændelig — brugeren sludrer lidt om hvad de sidder med, "
-        "før de kommer til selve spørgsmålet.\n"
-        'Eksempel: "Sidder her og arbejder på min bachelor og det går lidt langsomt... '
-        'har brug for et afsnit der forklarer sammenhængen mellem neoliberalisme og '
-        'velfærdsreformer. Noget akademisk ville være perfekt, tak."',
-        "Stil: uformel og lidt omstændelig — brugeren sludrer lidt om hvad de sidder med, "
-        "før de kommer til selve spørgsmålet.\n"
-        'Eksempel: "Arbejder på et kreativt projekt og har fundet på en karakter der er lidt '
-        'melankolsk og ensom. Kan du skrive et kort prosauddrag fra hendes perspektiv, '
-        'noget stemningsfuldt?"',
-    ),
-    # 4 — thinks aloud, builds up the request in stages
-    (
-        "Stil: brugeren tænker højt og bygger anmodningen op i etaper — "
-        "starter vagt og specificerer gradvist hvad de vil have.\n"
-        'Eksempel: "Noget analytisk om diskurs i politologi... ikke for teknisk... måske '
-        'to-tre afsnit der introducerer begrebet og viser brugen i praksis. Ja, det tror '
-        'jeg passer. Kan du skrive det?"',
-        "Stil: brugeren tænker højt og bygger anmodningen op i etaper — "
-        "starter vagt og specificerer gradvist hvad de vil have.\n"
-        'Eksempel: "Noget poetisk, tror jeg... eksperimenterende form, om tid og '
-        'forgængelighed. Måske to strofer? Prøv."',
-    ),
-    # 5 — very short, telegraphic
-    (
-        "Stil: meget kort og telegrafisk, ingen forklaring.\n"
-        'Eksempel: "Akademisk tekst om arbejdsmarkedspolitik, dansk, analytisk tone."',
-        "Stil: meget kort og telegrafisk, ingen forklaring.\n"
-        'Eksempel: "Digt. Sommer. Vemod. Fri form."',
-    ),
-    # 6 — roleplay / framing instruction
-    (
-        "Stil: brugeren sætter en ramme eller rolle for assistenten.\n"
-        'Eksempel: "Du er en universitetslektor. Skriv et kort introduktionsafsnit til et '
-        'pensum om politisk teori, beregnet til studerende på bachelorniveau."',
-        "Stil: brugeren sætter en ramme eller rolle for assistenten.\n"
-        'Eksempel: "Forestil dig at du er en forfatter der skriver en novellesamling. '
-        'Skriv åbningsafsnittet til en historie om en kvinde der vender hjem til sin barndomsby."',
-    ),
-    # 7 — question framing (asks what something is, expects an essay-style answer)
-    (
-        "Stil: formuleret som et spørgsmål der forventer et uddybende, essayistisk svar.\n"
-        'Eksempel: "Hvad er de centrale argumenter for og imod indførelsen af borgerløn '
-        'i en skandinavisk velfærdsmodel?"',
-        "Stil: formuleret som et spørgsmål der forventer et kreativt, reflekterende svar.\n"
-        'Eksempel: "Hvad er det egentlig vi mister, når et sprog dør ud?"',
-    ),
-    # 8 — noisy, casual, with small digression before the actual ask
-    (
-        "Stil: hverdagsagtig og upoleret — brugeren nævner noget irrelevant eller småsjovt "
-        "inden de stiller det egentlige spørgsmål.\n"
-        'Eksempel: "Haha okay jeg har siddet her i to timer og lavet alt muligt andet end '
-        'det jeg skal... men nu: kan du skrive et kort akademisk afsnit om medialisering '
-        'og politisk kommunikation? Gerne med en kritisk vinkel."',
-        "Stil: hverdagsagtig og upoleret — brugeren nævner noget irrelevant eller småsjovt "
-        "inden de stiller det egentlige spørgsmål.\n"
-        'Eksempel: "Det er sent og jeg er træt men hjernen vil ikke stoppe... skriv noget '
-        'smukt og roligt om natten og stilheden? Tak."',
-    ),
-    # 9 — professional / formal register
-    (
-        "Stil: professionel og formel, som en kollega eller redaktør der bestiller tekst.\n"
-        'Eksempel: "Vi mangler et kort, velformuleret introduktionsafsnit til et '
-        'temanummer om digitalisering i det offentlige. Akademisk register, ca. 150 ord."',
-        "Stil: professionel og formel, som en kollega eller redaktør der bestiller tekst.\n"
-        'Eksempel: "Vi mangler et stemningsfuldt indledningsafsnit til en antologi om '
-        'dansk natur. Lyrisk og eftertænksom tone, gerne med en konkret naturbeskrivelse."',
-    ),
-]
+# Deterministic length buckets: 50% short, 33% medium, 17% long.
+_LENGTH_BUCKETS: list[str] = ["kort", "kort", "kort", "medium", "medium", "lang"]
+
+_LENGTH_RULES: dict[str, str] = {
+    "kort": "Prompten skal være MEGET KORT: maksimalt 1-2 sætninger. Kortere er bedre.",
+    "medium": "Prompten skal være 2-4 sætninger lang.",
+    "lang": "Prompten må gerne være lang og detaljeret — 5 sætninger eller mere.",
+}
 
 
 def build(cfg: dict[str, Any]) -> BuildResult:
@@ -259,6 +167,16 @@ def publish(run_id_or_path: str, out_dir: str | None = None) -> dict[str, Any]:
     }
 
 
+def _load_personas(n: int) -> list[str]:
+    """Stream the first n personas from nvidia/Nemotron-Personas-USA."""
+    import itertools
+
+    from datasets import load_dataset  # type: ignore[import-untyped]
+
+    ds = load_dataset("nvidia/Nemotron-Personas-USA", split="train", streaming=True)
+    return [str(row["persona"]) for row in itertools.islice(ds, n)]  # type: ignore[arg-type]
+
+
 def _build_run(
     *,
     cfg: dict[str, Any],
@@ -276,9 +194,13 @@ def _build_run(
         f"loaded {source_stats['pending_rows']} pending passages from "
         f"{source_stats['scanned_docs']} documents"
     )
+    _progress_log("loading personas from nvidia/Nemotron-Personas-USA...")
+    personas = _load_personas(max(source_stats["pending_rows"], 1))
+    _progress_log(f"loaded {len(personas)} personas")
     completed_rows, failed_rows = _make_rows(
         cfg=cfg,
         writer=writer,
+        personas=personas,
         dataset_path=dataset_path,
         failures_path=failures_path,
         processed_source_ids=resume_state["processed_source_ids"],
@@ -408,8 +330,6 @@ def _iter_passages(
                 "passage": passage,
                 "source_id": source_id,
                 "passage_idx": p_idx,
-                # Use passage_idx for seed cycling so passages within an article
-                # get different prompt styles.
                 "row_index": p_idx,
             }
 
@@ -471,6 +391,7 @@ def _make_rows(
     *,
     cfg: dict[str, Any],
     writer: LLM,
+    personas: list[str],
     dataset_path: Path,
     failures_path: Path,
     processed_source_ids: set[str],
@@ -482,6 +403,7 @@ def _make_rows(
         _make_rows_async(
             cfg=cfg,
             writer=writer,
+            personas=personas,
             dataset_path=dataset_path,
             failures_path=failures_path,
             processed_source_ids=processed_source_ids,
@@ -496,6 +418,7 @@ async def _make_rows_async(
     *,
     cfg: dict[str, Any],
     writer: LLM,
+    personas: list[str],
     dataset_path: Path,
     failures_path: Path,
     processed_source_ids: set[str],
@@ -534,6 +457,7 @@ async def _make_rows_async(
             lambda _, article: _generate_row_result(
                 article=article,
                 writer=writer,
+                personas=personas,
                 temperature=temperature,
                 source=source,
             ),
@@ -572,10 +496,19 @@ async def _generate_row(
     *,
     article: dict[str, Any],
     writer: LLM,
+    personas: list[str],
     temperature: float,
     source: dict[str, Any],
 ) -> dict[str, Any]:
-    messages = _instruction_messages(article)
+    # Sample a persona deterministically. Multiply record_index to spread passages
+    # within the same article across distant parts of the persona list.
+    persona_idx = (article["record_index"] * 7 + article["passage_idx"]) % len(personas)
+    persona = personas[persona_idx]
+
+    length_key = (article.get("record_index", 0) + article.get("passage_idx", 0)) % len(_LENGTH_BUCKETS)
+    prompt_length = _LENGTH_BUCKETS[length_key]
+
+    messages = _instruction_messages(article, persona=persona, prompt_length=prompt_length)
     prompt = await _generate_prompt(writer, messages, temperature=temperature)
     cleaned_prompt = _clean_generated_prompt(prompt)
     return {
@@ -614,6 +547,7 @@ async def _generate_row_result(
     *,
     article: dict[str, Any],
     writer: LLM,
+    personas: list[str],
     temperature: float,
     source: dict[str, Any],
 ) -> dict[str, dict[str, Any]]:
@@ -621,6 +555,7 @@ async def _generate_row_result(
         row = await _generate_row(
             article=article,
             writer=writer,
+            personas=personas,
             temperature=temperature,
             source=source,
         )
@@ -671,11 +606,14 @@ async def _generate_prompt(
     raise last_error
 
 
-def _instruction_messages(article: dict[str, Any]) -> list[dict[str, str]]:
-    """Build chat messages for the instruction writer, tailored to the journal type."""
+def _instruction_messages(
+    article: dict[str, Any],
+    *,
+    persona: str | None = None,
+    prompt_length: str = "medium",
+) -> list[dict[str, str]]:
     journal = article.get("journal") or ""
     journal_meta = _JOURNALS.get(journal, {})
-    is_creative = bool(journal_meta.get("creative", False))
 
     # Prefer description from the dataset record; fall back to journals.json.
     journal_description = (
@@ -689,10 +627,13 @@ def _instruction_messages(article: dict[str, Any]) -> list[dict[str, str]]:
         user_lines.append(f"Titel: {article['title']}")
     user_lines.append(article["passage"])
 
-    # System message sets context and output rules only.
+    length_rule = _LENGTH_RULES.get(prompt_length, _LENGTH_RULES["medium"])
+
+    # System message sets context, output rules, and length constraint.
     system_lines = [
         "Du er en assistent der laver træningsdata til sprogmodeller.",
         "Du svarer KUN med selve prompten — ingen forklaringer, overskrifter eller meta-kommentarer.",
+        length_rule,
         "Prompten skal være selvstændig og må IKKE referere til specifikke artikler, dokumenter "
         "eller tekster der ikke er vedlagt — ingen 'disse artikler', 'ovenstående tekst', "
         "'nedenstående dokument', 'de tre artikler' eller lignende. "
@@ -705,17 +646,16 @@ def _instruction_messages(article: dict[str, Any]) -> list[dict[str, str]]:
 
     system_content = "\n".join(system_lines)
 
-    # Cycle through style seeds for diversity; pick based on row_index.
-    seed_index = article.get("row_index", 0) % len(_STYLE_SEEDS)
-    task_academic, task_creative = _STYLE_SEEDS[seed_index]
-    task = task_creative if is_creative else task_academic
-
-    user_content = (
-        "\n".join(user_lines)
-        + f"\n\n---\nSkriv en prompt der ville føre en AI til at skrive ovenstående tekst. "
-        f"Brug følgende stil som inspiration — efterlign tonen og strukturen, "
-        f"men variér åbning og ordvalg frit. Eksemplet er kun ét eksempel på stilen:\n\n{task}"
+    style_block = (
+        f"Persona (in English):\n{persona}\n\n"
+        "Write the prompt as this type of person would — in Danish, adapted to a Danish context."
+        if persona
+        else ""
     )
+
+    user_content = "\n".join(user_lines) + "\n\n---\nSkriv en prompt der ville føre en AI til at skrive ovenstående tekst."
+    if style_block:
+        user_content += f"\n\n{style_block}"
 
     return [
         {"role": "system", "content": system_content},
@@ -753,8 +693,6 @@ def _clean_generated_prompt(value: str) -> str:
     ):
         raise ValueError(f"self-referential prompt detected: {text[:120]!r}")
     return text
-
-
 
 
 def _extract_passages(
