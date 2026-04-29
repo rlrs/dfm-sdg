@@ -319,7 +319,8 @@ def _iter_passages(
         if max_articles is not None and kept_docs >= max_articles:
             break
 
-        passages = _extract_passages(article["text"])
+        min_chars = max(int(generation.get("min_article_chars", 0)), 200)
+        passages = _extract_passages(article["text"], min_chars=min_chars)
         if not passages:
             continue
 
@@ -1073,10 +1074,15 @@ def _load_verified_rows(result: BuildResult) -> list[dict[str, Any]]:
     min_article_chars = int(cfg["generation"].get("min_article_chars", 0))
     verified_rows = common_eval.verify(rows, _has_prompt, name="prompt_present")
     verified_rows = common_eval.verify(verified_rows, _has_target, name="target_present")
-    return common_eval.verify(
+    verified_rows = common_eval.verify(
         verified_rows,
         lambda row: _target_meets_min_chars(row, min_article_chars),
         name="target_min_chars",
+    )
+    return common_eval.verify(
+        verified_rows,
+        _target_is_not_references,
+        name="target_not_references",
     )
 
 
