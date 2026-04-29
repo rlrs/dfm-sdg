@@ -73,6 +73,11 @@ def verify(run_id_or_path: str) -> dict[str, Any]:
         lambda row: _target_meets_min_chars(row, min_article_chars),
         name="target_min_chars",
     )
+    verified_rows = common_eval.verify(
+        verified_rows,
+        _target_is_not_references,
+        name="target_not_references",
+    )
     failures = [row for row in verified_rows if not _row_passes(row)]
 
     outputs_dir = Path(result.run_dir) / "outputs"
@@ -869,32 +874,7 @@ def _score_paragraph(p: str) -> float:
     if lines and sum(len(ln) < 60 for ln in lines) / len(lines) > 0.7:
         return 0.0
 
-    # Reference list patterns:
-    #   - dash-style with parenthesised year:  "- Author, X. (YYYY)"
-    #   - dash-style numbered footnotes:       "- 1 Author…" / "- 16 Se …"
-    #   - dash-style bibliography:             "- Murray, Stuart. 2004. Title"
-    #   - bracket style:                       "[1] Author"
-    #   - period-year bibliography:            "Author, First. YYYY. Title"
-    #   - year-bracket bibliography:           "Author. 1994 [1989]. Title"  / "Author, red. 2015a."
-    #   - numbered footnotes (space):          "1 Author..." / "23 Note text..."
-    #   - numbered footnotes (period):         "28. I Jens Himmelstrups..." / "3. Se …"
-    #   - newspaper/media citation:            "Author, N.E. (19. juli 2015). 'Title'. I: Publication"
-    ref_lines = sum(
-        1
-        for ln in lines
-        if re.match(r"^\s*[-–]\s+\w.{0,40}\(\d{4}\)", ln)  # noqa: RUF001
-        or re.match(r"^\s*[-–]\s+\d{1,3}\s+\w", ln)  # noqa: RUF001
-        or re.match(r"^\s*[-–]\s+[A-ZÆØÅ]\w.{0,80}\d{4}", ln)  # noqa: RUF001
-        or re.match(r"^\s*\[\d+\]", ln)
-        # Broader period-year: catches "Author. YYYY." / "Author. YYYY [YYYY2]" / "Author, red. YYYYa."
-        or re.match(r"^\s*\w[\w\s,\-\.]{5,40}\.\s+\d{4}", ln)
-        # Numbered footnotes (space-separated): "1 Author..." or "23 Note text..."
-        or re.match(r"^\s*\d{1,3}\s+[A-ZÆØÅ]\w", ln)
-        # Numbered footnotes (period-separated): "28. I Jens..." or "3. Se ..."
-        or re.match(r"^\s*\d{1,3}\.\s+[A-ZÆØÅ\w]", ln)
-        # Newspaper/media citation: "Author, Initial (day. month year)"
-        or re.match(r"^\s*[A-ZÆØÅ]\w+,\s+\w[\w\.\-]{0,10}\s*\(\d", ln)
-    )
+    ref_lines = sum(1 for ln in lines if _is_reference_line(ln))
     if lines and ref_lines / len(lines) > 0.3:
         return 0.0
 
@@ -1104,6 +1084,23 @@ def _load_cfg(result: BuildResult) -> dict[str, Any]:
     return read_yaml(Path(result.run_dir) / "config.yaml")
 
 
+_REF_LINE_PATTERNS: list[re.Pattern[str]] = [
+    re.compile(r"^\s*[-–]\s+\w.{0,40}\(\d{4}\)"),  # noqa: RUF001
+    re.compile(r"^\s*[-–]\s+\d{1,3}\s+\w"),  # noqa: RUF001
+    re.compile(r"^\s*[-–]\s+[A-ZÆØÅ]\w.{0,80}\d{4}"),  # noqa: RUF001
+    re.compile(r"^\s*\[\d+\]"),
+    re.compile(r"^\s*\w[\w\s,\-\.]{5,40}\.\s+\d{4}"),
+    re.compile(r"^\s*\d{1,3}\s+[A-ZÆØÅ]\w"),
+    re.compile(r"^\s*\d{1,3}\.\s+[A-ZÆØÅ\w]"),
+    re.compile(r"^\s*[A-ZÆØÅ]\w+,\s+\w[\w\.\-]{0,10}\s*\(\d"),
+    re.compile(r"^\s*[A-ZÆØÅ]\w+,\s+\w[\w\.\s,&\-]*\(\d{4}\)"),  # multi-author APA
+]
+
+
+def _is_reference_line(line: str) -> bool:
+    return any(p.match(line) for p in _REF_LINE_PATTERNS)
+
+
 def _has_prompt(row: dict[str, Any]) -> bool:
     return bool(str(row.get("prompt", "")).strip())
 
@@ -1114,6 +1111,14 @@ def _has_target(row: dict[str, Any]) -> bool:
 
 def _target_meets_min_chars(row: dict[str, Any], min_article_chars: int) -> bool:
     return len(str(row.get("target", "")).strip()) >= min_article_chars
+
+
+def _target_is_not_references(row: dict[str, Any]) -> bool:
+    lines = [ln for ln in str(row.get("target", "")).splitlines() if ln.strip()]
+    if not lines:
+        return True
+    ref_count = sum(1 for ln in lines if _is_reference_line(ln))
+    return ref_count / len(lines) <= 0.3
 
 
 def _row_passes(row: dict[str, Any]) -> bool:

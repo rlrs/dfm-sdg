@@ -13,6 +13,6 @@ source:
   journal_field: journal
   journal_description_field: journal_description
 generation:
-  min_article_chars: 400
+  min_article_chars: 100
   temperature: 1.0
   train_fraction: 0.9
