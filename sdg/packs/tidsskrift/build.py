@@ -124,9 +124,10 @@ def summarize(run_id_or_path: str) -> dict[str, Any]:
 
 def publish(run_id_or_path: str, out_dir: str | None = None) -> dict[str, Any]:
     result = load(run_id_or_path)
-    rows = _load_verified_rows(result)
+    verified_rows = _load_verified_rows(result)
     cfg = _load_cfg(result)
-    failures = [row for row in rows if not _row_passes(row)]
+    failures = [row for row in verified_rows if not _row_passes(row)]
+    rows = [row for row in verified_rows if _row_passes(row)]
     train_rows, eval_rows = _split_rows(rows, cfg["generation"]["train_fraction"])
 
     target_dir = _publish_dir(result, out_dir)
@@ -875,6 +876,10 @@ def _score_paragraph(p: str) -> float:
     if lines and sum(len(ln) < 60 for ln in lines) / len(lines) > 0.7:
         return 0.0
 
+    # Single-entry bibliography references can be one long paragraph.
+    if _looks_like_bibliographic_entry(p):
+        return 0.0
+
     ref_lines = sum(1 for ln in lines if _is_reference_line(ln))
     if lines and ref_lines / len(lines) > 0.3:
         return 0.0
@@ -1107,6 +1112,47 @@ def _is_reference_line(line: str) -> bool:
     return any(p.match(line) for p in _REF_LINE_PATTERNS)
 
 
+def _looks_like_bibliographic_entry(text: str) -> bool:
+    compact = " ".join(text.split())
+    if len(compact) < 70:
+        return False
+
+    authorish_start = bool(re.match(r"^[A-ZÆØÅ][\w'\-]+,\s+[A-ZÆØÅ]", compact))
+    year_colon_marker = bool(re.search(r"\b\d{4}[a-z]?\s*:", compact, re.IGNORECASE))
+    year_paren_marker = bool(re.search(r"\(\s*\d{4}[a-z]?\s*\)", compact, re.IGNORECASE))
+    in_press_marker = bool(re.search(r"\(\s*in\s+press\s*\)", compact, re.IGNORECASE))
+    in_marker = bool(re.search(r"\bIn:\b", compact, re.IGNORECASE))
+    i_marker = bool(re.search(r"\bI:\b", compact, re.IGNORECASE))
+    pages_marker = bool(re.search(r"\(pp?\.\s*\d+\s*[-–]\s*\d+\)", compact, re.IGNORECASE))  # noqa: RUF001
+    danish_pages_marker = bool(re.search(r"\(s\.\s*\d+\s*[-–]\s*\d+\)", compact, re.IGNORECASE))  # noqa: RUF001
+    editor_marker = bool(re.search(r"\((?:red\.|eds?\.)\)", compact, re.IGNORECASE))
+    issue_pages_marker = bool(re.search(r"\bnr\.\s*\d+\b.*\b\d+\s*[-–]\s*\d+\b", compact, re.IGNORECASE))  # noqa: RUF001
+    place_publisher_marker = bool(re.search(r"\b[A-ZÆØÅ][a-zæøå]+:\s+[A-ZÆØÅ][\w&\-\s]+", compact))
+    institutional_publisher_tail = bool(
+        re.search(
+            r"\b(?:center|forlag|universitetsforlag|samfundslitteratur)\b[\w\s\-]*\.?$",
+            compact,
+            re.IGNORECASE,
+        )
+    )
+
+    temporal_marker = year_colon_marker or year_paren_marker or in_press_marker
+    source_marker = in_marker or i_marker
+
+    if authorish_start and in_press_marker:
+        return True
+    if authorish_start and temporal_marker and (source_marker or pages_marker or danish_pages_marker or editor_marker):
+        return True
+    if source_marker and temporal_marker and (pages_marker or danish_pages_marker or editor_marker or place_publisher_marker):
+        return True
+    if authorish_start and temporal_marker and issue_pages_marker:
+        return True
+    if authorish_start and temporal_marker and institutional_publisher_tail:
+        return True
+
+    return False
+
+
 def _has_prompt(row: dict[str, Any]) -> bool:
     return bool(str(row.get("prompt", "")).strip())
 
@@ -1120,7 +1166,11 @@ def _target_meets_min_chars(row: dict[str, Any], min_article_chars: int) -> bool
 
 
 def _target_is_not_references(row: dict[str, Any]) -> bool:
-    lines = [ln for ln in str(row.get("target", "")).splitlines() if ln.strip()]
+    target = str(row.get("target", ""))
+    if _looks_like_bibliographic_entry(target):
+        return False
+
+    lines = [ln for ln in target.splitlines() if ln.strip()]
     if not lines:
         return True
     ref_count = sum(1 for ln in lines if _is_reference_line(ln))
