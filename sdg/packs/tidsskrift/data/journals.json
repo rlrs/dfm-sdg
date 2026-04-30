@@ -1,0 +1,66 @@
+{
+  "passage": {
+    "description": "Passage – Tidsskrift for litteratur og kritik er et dansk tidsskrift der indeholder en blanding af tre typer tekster: (1) skønlitterære tekster — digte, prosa og uddrag af fiktion skrevet af forfattere; (2) akademiske og essayistiske artikler hvor forfattere og litteraturforskere skriver om litteratur, litteraturteori og kulturel diskurs; og (3) redaktionelle forord fra redaktionen. En given tekst fra Passage kan altså være enten et originalt skønlitterært værk, en litteraturvidenskabelig analyse eller et redaktionelt indlæg.",
+    "creative": true
+  },
+  "kok": {
+    "description": "K&K – Kultur og Klasse er et fagfællebedømt humanistisk tidsskrift der publicerer teoretiske og analytiske artikler om litteratur, billedkunst, teater, film, musik, medier og kulturstudier. Det henvender sig primært til nordiske akademikere inden for humaniora.",
+    "creative": false
+  },
+  "journalistica": {
+    "description": "Journalistica er et nordisk, open access-tidsskrift der publicerer akademisk forskning i journalistik som tværfagligt felt. Det henvender sig til forskere inden for journalistik, kommunikation, statskundskab, sociologi og tilgrænsende discipliner.",
+    "creative": false
+  },
+  "periskop": {
+    "description": "Periskop – Forum for kunsthistorisk debat er et dansk kunsthistorisk tidsskrift der udgives to gange årligt. Det publicerer artikler, essays og debatindlæg om kunsthistoriske og kunstteoretiske emner, primært rettet mod kunsthistorikere og fagprofessionelle.",
+    "creative": false
+  },
+  "rvt": {
+    "description": "Religionsvidenskabeligt Tidsskrift er et fagfællebedømt tidsskrift tilknyttet Aarhus Universitets Institut for Religionsvidenskab. Det publicerer forskningsartikler og essays om religion på tværs af former, perioder og kulturer med teoretisk forankring i sociologi, filosofi, psykologi og kognitionsvidenskab.",
+    "creative": false
+  },
+  "politica": {
+    "description": "Politica er Danmarks ledende statskundskabelige tidsskrift og publicerer fagfællebedømte forskningsartikler og videnskabelige kommentarer inden for politologi og samfundsvidenskab. Det henvender sig til akademikere, forskere og andre med interesse for politisk videnskab.",
+    "creative": false
+  },
+  "akut": {
+    "description": "Dansk Tidsskrift for Akutmedicin er et open access-tidsskrift inden for akutmedicin der publicerer fagfællebedømt originalforskning, kliniske retningslinjer og kasuistikker. Det henvender sig til sundhedsprofessionelle med interesse for akut klinisk praksis.",
+    "creative": false
+  },
+  "frakvangaardtilhumlekule": {
+    "description": "Fra Kvangård til Humlekule er et årsskrift udgivet af Havehistorisk Selskab med artikler inden for havehistorie og havekunst. Det henvender sig til selskabets medlemmer samt forskere og interesserede med tilknytning til historiske haver og havekultur.",
+    "creative": false
+  },
+  "kierkegaardiana": {
+    "description": "Kierkegaardiana er et akademisk tidsskrift viet Søren Kierkegaard-forskning, oprindeligt grundlagt som Søren Kierkegaard Selskabets årbog i 1955. Det henvender sig til internationale Kierkegaard-forskere og filosofferne med interesse for eksistensfilosofi.",
+    "creative": false
+  },
+  "FPPU": {
+    "description": "Forskning i Pædagogers Profession og Uddannelse er et fagfællebedømt dansk tidsskrift der publicerer forskning i pædagogers profession, arbejdsfelter og uddannelse. Det henvender sig til forskere, undervisere og studerende på pædagoguddannelsen samt praktikere i det pædagogiske felt.",
+    "creative": false
+  },
+  "prototyper": {
+    "description": "Prototyper – Studier i design er et dansk fagfællebedømt tidsskrift der publicerer studenterforskning fra designuddannelserne ved Syddansk Universitet i Kolding. Det dækker designstudier og designkultur og henvender sig til designstuderende og akademikere med interesse for designteori og -diskurs.",
+    "creative": false
+  },
+  "dttk": {
+    "description": "Dansk Tidsskrift for Teologi og Kirke er et akademisk teologisk tidsskrift med et kirkeligt perspektiv. Det publicerer forskningsartikler og populærvidenskabelige bidrag om moderne kirkeliv og kristendom, rettet mod teologer og kirkeligt engagerede læsere.",
+    "creative": false
+  },
+  "forumforidraet": {
+    "description": "Forum for Idræt er et dansk open access-tidsskrift der publicerer forskning i sport, fysisk aktivitet og bevægelse fra historiske, humanistiske og samfundsvidenskabelige perspektiver. Det henvender sig til forskere og fagprofessionelle inden for idrætsskiverne.",
+    "creative": false
+  },
+  "tidsskriftforuddannelsesvidens": {
+    "description": "Tidsskrift for Uddannelsesvidenskab / Danish Journal of Education Studies er et open access-tidsskrift inden for uddannelsesforskning der publicerer fagfællebedømte artikler om pædagogiske og uddannelsespolitiske emner i en samfundsmæssig kontekst. Det henvender sig til forskere og praktikere inden for uddannelse, pædagogik og læring.",
+    "creative": false
+  },
+  "politik": {
+    "description": "Politik er et tværfagligt samfundsvidenskabeligt tidsskrift der publicerer fagfællebedømte artikler om politiske emner fra forskellige akademiske perspektiver. Det henvender sig til universitetsforskere og almene læsere med interesse for politisk relevant forskning og analyse.",
+    "creative": false
+  },
+  "tidsskrift-for-arbejdsliv": {
+    "description": "Tidsskrift for Arbejdsliv er et dansk, tværfagligt akademisk tidsskrift der publicerer forskning om arbejdsliv, arbejdsmiljø og arbejdsmarked. Det udkommer tre gange årligt og henvender sig til forskere, undervisere, studerende og fagprofessionelle på tværs af sociologi, psykologi, historie, jura, økonomi og tilgrænsende felter.",
+    "creative": false
+  }
+}
