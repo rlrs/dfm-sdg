@@ -1,0 +1,13 @@
+pack: dst_statbank
+reuse_completed: false
+source:
+  progress_file: /Users/oliver/alexandra/dfm/more-data/dst-scraper/downloads/progress.jsonl
+  cache_file: /Users/oliver/alexandra/dfm/more-data/dst-scraper/downloads/statbank_cache.jsonl
+  content_types:
+    - nyt
+generation:
+  max_articles: 5
+  max_tables_per_article: 3
+  max_rows_per_table: 50
+  min_target_chars: 200
+  train_fraction: 0.9

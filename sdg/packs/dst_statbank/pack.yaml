@@ -1,0 +1,10 @@
+name: dst_statbank
+description: >
+  Instruction backtranslation from Danmarks Statistik articles.
+  Pairs StatBank table data with the "Nyt" article written from it.
+  Requires statbank_cache.jsonl produced by the dst-scraper enrichment script.
+entrypoints:
+  build: sdg.packs.dst_statbank.build:build
+  verify: sdg.packs.dst_statbank.build:verify
+  summarize: sdg.packs.dst_statbank.build:summarize
+  publish: sdg.packs.dst_statbank.build:publish
