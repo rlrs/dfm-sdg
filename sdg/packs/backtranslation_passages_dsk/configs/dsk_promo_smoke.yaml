@@ -1,0 +1,84 @@
+pack: backtranslation_passages_dsk
+reuse_completed: false
+models:
+  instruction_writer:
+    endpoint: openai
+    max_concurrency: 5
+generation:
+  min_article_chars: 400
+  temperature: 1.0
+  train_fraction: 0.9
+sources:
+  # To use a private HuggingFace dataset, replace path with dataset: oliverkinch/dsk-bt/<source>
+  - name: vejle
+    source:
+      path: /Users/oliver/alexandra/dfm/more-data/dsk/datasets/dsk-vejle.parquet
+      text_field: text
+      id_field: id
+    generation:
+      content_type: promo
+      max_articles: 1
+  - name: salling
+    source:
+      path: /Users/oliver/alexandra/dfm/more-data/dsk/datasets/dsk-salling.parquet
+      text_field: text
+      id_field: id
+    generation:
+      content_type: promo
+      max_articles: 1
+  - name: cbrain
+    source:
+      path: /Users/oliver/alexandra/dfm/more-data/dsk/datasets/dsk-cbrain.parquet
+      text_field: text
+      id_field: id
+    generation:
+      content_type: promo
+      max_articles: 1
+  - name: atp
+    source:
+      path: /Users/oliver/alexandra/dfm/more-data/dsk/datasets/dsk-atp.parquet
+      text_field: text
+      id_field: id
+    generation:
+      content_type: promo
+      max_articles: 1
+  - name: plesner
+    source:
+      path: /Users/oliver/alexandra/dfm/more-data/dsk/datasets/dsk-plesner.parquet
+      text_field: text
+      id_field: id
+    generation:
+      content_type: promo
+      max_articles: 1
+  - name: alexandra
+    source:
+      path: /Users/oliver/alexandra/dfm/more-data/dsk/datasets/dsk-alexandra.parquet
+      text_field: text
+      id_field: id
+    generation:
+      content_type: promo
+      max_articles: 1
+  - name: vitec
+    source:
+      path: /Users/oliver/alexandra/dfm/more-data/dsk/datasets/dsk-vitec.parquet
+      text_field: text
+      id_field: id
+    generation:
+      content_type: promo
+      max_articles: 1
+  - name: ida
+    source:
+      path: /Users/oliver/alexandra/dfm/more-data/dsk/datasets/dsk-ida.parquet
+      text_field: text
+      id_field: id
+    generation:
+      content_type: promo
+      max_articles: 1
+  - name: hofor
+    source:
+      path: /Users/oliver/alexandra/dfm/more-data/dsk/datasets/dsk-hofor.parquet
+      text_field: text
+      id_field: id
+    generation:
+      content_type: promo
+      max_articles: 1

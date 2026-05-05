@@ -13,7 +13,12 @@ def iter_source_records(
 ):
     path = source.get("path")
     if path:
-        return store.iter_jsonl(Path(path).expanduser().resolve())
+        p = Path(path).expanduser().resolve()
+        if p.suffix == ".parquet":
+            from datasets import load_dataset
+
+            return load_dataset("parquet", data_files=str(p), split="train")
+        return store.iter_jsonl(p)
 
     from datasets import load_dataset
 

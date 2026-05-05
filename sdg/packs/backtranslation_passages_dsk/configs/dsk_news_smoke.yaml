@@ -1,0 +1,28 @@
+pack: backtranslation_passages_dsk
+reuse_completed: false
+models:
+  instruction_writer:
+    endpoint: openai
+    max_concurrency: 5
+generation:
+  min_article_chars: 400
+  temperature: 1.0
+  train_fraction: 0.9
+sources:
+  # To use a private HuggingFace dataset, replace path with dataset: oliverkinch/dsk-bt/<source>
+  - name: odense
+    source:
+      path: /Users/oliver/alexandra/dfm/more-data/dsk/datasets/dsk-odense.parquet
+      text_field: text
+      id_field: id
+    generation:
+      content_type: news
+      max_articles: 1
+  - name: danskerhverv
+    source:
+      path: /Users/oliver/alexandra/dfm/more-data/dsk/datasets/dsk-danskerhverv.parquet
+      text_field: text
+      id_field: id
+    generation:
+      content_type: news
+      max_articles: 1

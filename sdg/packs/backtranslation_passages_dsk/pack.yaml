@@ -1,0 +1,7 @@
+name: backtranslation_passages_dsk
+description: Instruction backtranslation from DSK passage chunks (news and promo/self-selling).
+entrypoints:
+  build: sdg.packs.backtranslation_passages_dsk.build:build
+  verify: sdg.packs.backtranslation_passages_dsk.build:verify
+  summarize: sdg.packs.backtranslation_passages_dsk.build:summarize
+  publish: sdg.packs.backtranslation_passages_dsk.build:publish
