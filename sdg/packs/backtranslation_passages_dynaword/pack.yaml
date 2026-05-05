@@ -1,0 +1,7 @@
+name: backtranslation_passages_dynaword
+description: Instruction backtranslation from Dynaword passage chunks with source-aware prompting.
+entrypoints:
+  build: sdg.packs.backtranslation_passages_dynaword.build:build
+  verify: sdg.packs.backtranslation_passages_dynaword.build:verify
+  summarize: sdg.packs.backtranslation_passages_dynaword.build:summarize
+  publish: sdg.packs.backtranslation_passages_dynaword.build:publish

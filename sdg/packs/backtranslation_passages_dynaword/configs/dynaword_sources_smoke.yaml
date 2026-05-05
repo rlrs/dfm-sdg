@@ -1,0 +1,52 @@
+pack: backtranslation_passages_dynaword
+reuse_completed: false
+models:
+  instruction_writer:
+    endpoint: openai
+    max_concurrency: 5
+generation:
+  min_article_chars: 400
+  full_text_max_chars: 1400
+  max_chars: 2500
+  max_passages_per_article: 4
+  chunk_mode: hybrid
+  temperature: 0.8
+  train_fraction: 0.9
+sources:
+  - name: danske-taler
+    source:
+      dataset: oliverkinch/dynaword-bt
+      config_name: danske-taler
+      split: train
+      text_field: text
+      id_field: id
+      streaming: true
+    generation:
+      source_type: speech
+      max_articles: 1
+  - name: ft
+    source:
+      dataset: oliverkinch/dynaword-bt
+      config_name: ft
+      split: train
+      text_field: text
+      id_field: id
+      streaming: true
+    generation:
+      source_type: speech
+      chunk_mode: passages
+      full_text_max_chars: 1000
+      max_articles: 1
+  - name: skat
+    source:
+      dataset: oliverkinch/dynaword-bt
+      config_name: skat
+      split: train
+      text_field: text
+      id_field: id
+      streaming: true
+    generation:
+      source_type: tax_guidance
+      chunk_mode: passages
+      full_text_max_chars: 1000
+      max_articles: 1

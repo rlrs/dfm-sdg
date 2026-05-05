@@ -1,0 +1,93 @@
+{
+  "danske-taler": {
+    "source_type": "speech",
+    "domain": "conversation",
+    "license_name": "CC-0",
+    "short_description": "Curated Danish public speeches from dansketaler.dk, spanning historical and contemporary contexts.",
+    "style_hints": [
+      "public address style",
+      "rhetorical but structured",
+      "audience-facing and topic-driven"
+    ],
+    "typical_length": "medium_to_long",
+    "chunking_recommendation": "hybrid"
+  },
+  "ft": {
+    "source_type": "speech",
+    "domain": "conversation",
+    "license_name": "CC-0",
+    "short_description": "Parliament transcripts from Folketinget with post-edited ASR text and policy-oriented proceedings.",
+    "style_hints": [
+      "formal parliamentary register",
+      "procedural and policy-heavy",
+      "single-speaker monologue segments"
+    ],
+    "typical_length": "very_long",
+    "chunking_recommendation": "passages"
+  },
+  "nordjyllandnews": {
+    "source_type": "news",
+    "domain": "news",
+    "license_name": "CC-0",
+    "short_description": "Regional Danish news articles from TV2 Nord derived from the Nordjylland summarization corpus.",
+    "style_hints": [
+      "regional events",
+      "editorial news style",
+      "short to medium article format"
+    ],
+    "typical_length": "short_to_medium",
+    "chunking_recommendation": "hybrid"
+  },
+  "tv2r": {
+    "source_type": "news",
+    "domain": "news",
+    "license_name": "CC-BY-SA 4.0",
+    "short_description": "Contemporary Danish newswire from TV 2 regional outlets, covering local events and entities.",
+    "style_hints": [
+      "neutral journalistic tone",
+      "current affairs and local reporting",
+      "headline plus body article structure"
+    ],
+    "typical_length": "short_to_medium",
+    "chunking_recommendation": "hybrid"
+  },
+  "skat": {
+    "source_type": "tax_guidance",
+    "domain": "legal",
+    "license_name": "CC-0",
+    "short_description": "Content from the Danish tax authority website (skat.dk), including practical tax information and decisions.",
+    "style_hints": [
+      "practical guidance for citizens and businesses",
+      "clear process and requirement language",
+      "deadline and documentation framing"
+    ],
+    "typical_length": "long",
+    "chunking_recommendation": "passages"
+  },
+  "miljoeportalen": {
+    "source_type": "government",
+    "domain": "web",
+    "license_name": "CC-0",
+    "short_description": "Public environmental portal content from Danish authorities, often technical and document-like.",
+    "style_hints": [
+      "public sector information style",
+      "regulatory and planning context",
+      "administrative structure and terminology"
+    ],
+    "typical_length": "very_long",
+    "chunking_recommendation": "passages"
+  },
+  "ai-aktindsigt": {
+    "source_type": "government",
+    "domain": "web",
+    "license_name": "Apache 2.0",
+    "short_description": "Municipality website scrapes collected for the AI-aktindsigt project, with broad public-service topics.",
+    "style_hints": [
+      "municipality information style",
+      "service pages and contact details",
+      "mixed content quality and structure"
+    ],
+    "typical_length": "short_to_medium",
+    "chunking_recommendation": "hybrid"
+  }
+}
