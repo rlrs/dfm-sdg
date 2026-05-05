@@ -1,0 +1,19 @@
+pack: dst_tables
+reuse_completed: false
+models:
+  instruction_writer:
+    endpoint: openai
+    max_concurrency: 5
+source:
+  dataset: oliverkinch/dst-tables
+  split: train
+  text_field: text
+  title_field: title
+  url_field: url
+  id_field: article_id
+  tables_md_field: inline_tables_md
+generation:
+  min_article_chars: 200
+  temperature: 1.0
+  train_fraction: 0.9
+  max_articles: 10
