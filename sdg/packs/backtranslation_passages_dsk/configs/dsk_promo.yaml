@@ -9,9 +9,6 @@ generation:
   temperature: 1.0
   train_fraction: 0.9
 sources:
-  # Prefer local parquet for internal data processing.
-  # If/when uploading to Hugging Face, keep dataset private.
-  # Suggested private dataset id: oliverkinch/dsk-bt
   - name: vejle
     source:
       path: dsk-vejle.parquet
