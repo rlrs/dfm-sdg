@@ -1,0 +1,7 @@
+name: backtranslation_passages
+description: Build instruction backtranslation data from passage chunks of long documents.
+entrypoints:
+  build: sdg.packs.backtranslation_passages.build:build
+  verify: sdg.packs.backtranslation_passages.build:verify
+  summarize: sdg.packs.backtranslation_passages.build:summarize
+  publish: sdg.packs.backtranslation_passages.build:publish
