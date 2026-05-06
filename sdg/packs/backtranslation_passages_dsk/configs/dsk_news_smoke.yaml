@@ -12,7 +12,7 @@ sources:
   # To use a private HuggingFace dataset, replace path with dataset: oliverkinch/dsk-bt/<source>
   - name: odense
     source:
-      path: /Users/oliver/alexandra/dfm/more-data/dsk/datasets/dsk-odense.parquet
+      path: dsk-odense.parquet
       text_field: text
       id_field: id
     generation:
@@ -20,7 +20,7 @@ sources:
       max_articles: 1
   - name: danskerhverv
     source:
-      path: /Users/oliver/alexandra/dfm/more-data/dsk/datasets/dsk-danskerhverv.parquet
+      path: dsk-danskerhverv.parquet
       text_field: text
       id_field: id
     generation:

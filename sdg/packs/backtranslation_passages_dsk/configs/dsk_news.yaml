@@ -14,7 +14,7 @@ sources:
   # Suggested private dataset id: oliverkinch/dsk-bt
   - name: odense
     source:
-      path: /Users/oliver/alexandra/dfm/more-data/dsk/datasets/dsk-odense.parquet
+      path: dsk-odense.parquet
       text_field: text
       id_field: id
     generation:
@@ -22,7 +22,7 @@ sources:
       max_articles: 5000
   - name: danskerhverv
     source:
-      path: /Users/oliver/alexandra/dfm/more-data/dsk/datasets/dsk-danskerhverv.parquet
+      path: dsk-danskerhverv.parquet
       text_field: text
       id_field: id
     generation:
@@ -30,7 +30,7 @@ sources:
       max_articles: 5000
   - name: dkmedier
     source:
-      path: /Users/oliver/alexandra/dfm/more-data/dsk/datasets/dsk-dkmedier.parquet
+      path: dsk-dkmedier.parquet
       text_field: text
       id_field: id
     generation:

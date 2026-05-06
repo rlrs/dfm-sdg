@@ -14,7 +14,7 @@ sources:
   # Suggested private dataset id: oliverkinch/dsk-bt
   - name: vejle
     source:
-      path: /Users/oliver/alexandra/dfm/more-data/dsk/datasets/dsk-vejle.parquet
+      path: dsk-vejle.parquet
       text_field: text
       id_field: id
     generation:
@@ -22,7 +22,7 @@ sources:
       max_articles: 5000
   - name: salling
     source:
-      path: /Users/oliver/alexandra/dfm/more-data/dsk/datasets/dsk-salling.parquet
+      path: dsk-salling.parquet
       text_field: text
       id_field: id
     generation:
@@ -30,7 +30,7 @@ sources:
       max_articles: 5000
   - name: cbrain
     source:
-      path: /Users/oliver/alexandra/dfm/more-data/dsk/datasets/dsk-cbrain.parquet
+      path: dsk-cbrain.parquet
       text_field: text
       id_field: id
     generation:
@@ -38,7 +38,7 @@ sources:
       max_articles: 5000
   - name: atp
     source:
-      path: /Users/oliver/alexandra/dfm/more-data/dsk/datasets/dsk-atp.parquet
+      path: dsk-atp.parquet
       text_field: text
       id_field: id
     generation:
@@ -46,7 +46,7 @@ sources:
       max_articles: 5000
   - name: plesner
     source:
-      path: /Users/oliver/alexandra/dfm/more-data/dsk/datasets/dsk-plesner.parquet
+      path: dsk-plesner.parquet
       text_field: text
       id_field: id
     generation:
@@ -54,7 +54,7 @@ sources:
       max_articles: 5000
   - name: alexandra
     source:
-      path: /Users/oliver/alexandra/dfm/more-data/dsk/datasets/dsk-alexandra.parquet
+      path: dsk-alexandra.parquet
       text_field: text
       id_field: id
     generation:
@@ -62,7 +62,7 @@ sources:
       max_articles: 5000
   - name: vitec
     source:
-      path: /Users/oliver/alexandra/dfm/more-data/dsk/datasets/dsk-vitec.parquet
+      path: dsk-vitec.parquet
       text_field: text
       id_field: id
     generation:
@@ -70,7 +70,7 @@ sources:
       max_articles: 5000
   - name: ida
     source:
-      path: /Users/oliver/alexandra/dfm/more-data/dsk/datasets/dsk-ida.parquet
+      path: dsk-ida.parquet
       text_field: text
       id_field: id
     generation:
@@ -78,7 +78,7 @@ sources:
       max_articles: 5000
   - name: hofor
     source:
-      path: /Users/oliver/alexandra/dfm/more-data/dsk/datasets/dsk-hofor.parquet
+      path: dsk-hofor.parquet
       text_field: text
       id_field: id
     generation:
