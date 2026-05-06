@@ -5,7 +5,7 @@ models:
     endpoint: openai
     max_concurrency: 5
 source:
-  dataset: oliverkinch/danish-university-portals-cc-by
+  dataset: oliverkinch/danish-university-portals
   split: train
   text_field: text
   url_field: url
