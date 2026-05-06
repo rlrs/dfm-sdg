@@ -1,0 +1,83 @@
+pack: backtranslation_passages_dsk
+reuse_completed: false
+models:
+  instruction_writer:
+    endpoint: openai
+    max_concurrency: 5
+generation:
+  min_article_chars: 400
+  temperature: 1.0
+  train_fraction: 0.9
+sources:
+  - name: vejle
+    source:
+      path: dsk-vejle.parquet
+      text_field: text
+      id_field: id
+    generation:
+      content_type: promo
+      max_articles: 1
+  - name: salling
+    source:
+      path: dsk-salling.parquet
+      text_field: text
+      id_field: id
+    generation:
+      content_type: promo
+      max_articles: 1
+  - name: cbrain
+    source:
+      path: dsk-cbrain.parquet
+      text_field: text
+      id_field: id
+    generation:
+      content_type: promo
+      max_articles: 1
+  - name: atp
+    source:
+      path: dsk-atp.parquet
+      text_field: text
+      id_field: id
+    generation:
+      content_type: promo
+      max_articles: 1
+  - name: plesner
+    source:
+      path: dsk-plesner.parquet
+      text_field: text
+      id_field: id
+    generation:
+      content_type: promo
+      max_articles: 1
+  - name: alexandra
+    source:
+      path: dsk-alexandra.parquet
+      text_field: text
+      id_field: id
+    generation:
+      content_type: promo
+      max_articles: 1
+  - name: vitec
+    source:
+      path: dsk-vitec.parquet
+      text_field: text
+      id_field: id
+    generation:
+      content_type: promo
+      max_articles: 1
+  - name: ida
+    source:
+      path: dsk-ida.parquet
+      text_field: text
+      id_field: id
+    generation:
+      content_type: promo
+      max_articles: 1
+  - name: hofor
+    source:
+      path: dsk-hofor.parquet
+      text_field: text
+      id_field: id
+    generation:
+      content_type: promo
+      max_articles: 1
