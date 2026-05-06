@@ -25,11 +25,3 @@ Run full:
 ```bash
 uv run sdg build sdg/packs/backtranslation_passages_eurlex/configs/eurlex_html.yaml
 ```
-
-Continue with a non-overlapping second slice (without starting from scratch):
-
-```bash
-uv run sdg build sdg/packs/backtranslation_passages_eurlex/configs/eurlex_html_5k_part2.yaml
-```
-
-This uses `source.start_row` to skip the first scanned rows from the initial run and process the next slice.
