@@ -15,7 +15,7 @@ generation:
 sources:
   - name: danske-taler
     source:
-      dataset: oliverkinch/dynaword-bt
+      dataset: danish-foundation-models/danish-dynaword
       config_name: danske-taler
       split: train
       text_field: text
@@ -27,7 +27,7 @@ sources:
 
   - name: ft
     source:
-      dataset: oliverkinch/dynaword-bt
+      dataset: danish-foundation-models/danish-dynaword
       config_name: ft
       split: train
       text_field: text
@@ -41,7 +41,7 @@ sources:
 
   - name: nordjyllandnews
     source:
-      dataset: oliverkinch/dynaword-bt
+      dataset: danish-foundation-models/danish-dynaword
       config_name: nordjyllandnews
       split: train
       text_field: text
@@ -53,7 +53,7 @@ sources:
 
   - name: tv2r
     source:
-      dataset: oliverkinch/dynaword-bt
+      dataset: danish-foundation-models/danish-dynaword
       config_name: tv2r
       split: train
       text_field: text
@@ -65,7 +65,7 @@ sources:
 
   - name: skat
     source:
-      dataset: oliverkinch/dynaword-bt
+      dataset: danish-foundation-models/danish-dynaword
       config_name: skat
       split: train
       text_field: text
@@ -79,7 +79,7 @@ sources:
 
   - name: miljoeportalen
     source:
-      dataset: oliverkinch/dynaword-bt
+      dataset: danish-foundation-models/danish-dynaword
       config_name: miljoeportalen
       split: train
       text_field: text
@@ -93,7 +93,7 @@ sources:
 
   - name: ai-aktindsigt
     source:
-      dataset: oliverkinch/dynaword-bt
+      dataset: danish-foundation-models/danish-dynaword
       config_name: ai-aktindsigt
       split: train
       text_field: text

@@ -15,7 +15,7 @@ generation:
 sources:
   - name: danske-taler
     source:
-      dataset: oliverkinch/dynaword-bt
+      dataset: danish-foundation-models/danish-dynaword
       config_name: danske-taler
       split: train
       text_field: text
@@ -24,9 +24,10 @@ sources:
     generation:
       source_type: speech
       max_articles: 1
+
   - name: ft
     source:
-      dataset: oliverkinch/dynaword-bt
+      dataset: danish-foundation-models/danish-dynaword
       config_name: ft
       split: train
       text_field: text
@@ -37,9 +38,34 @@ sources:
       chunk_mode: passages
       full_text_max_chars: 1000
       max_articles: 1
+
+  - name: nordjyllandnews
+    source:
+      dataset: danish-foundation-models/danish-dynaword
+      config_name: nordjyllandnews
+      split: train
+      text_field: text
+      id_field: id
+      streaming: true
+    generation:
+      source_type: news
+      max_articles: 1
+
+  - name: tv2r
+    source:
+      dataset: danish-foundation-models/danish-dynaword
+      config_name: tv2r
+      split: train
+      text_field: text
+      id_field: id
+      streaming: true
+    generation:
+      source_type: news
+      max_articles: 1
+
   - name: skat
     source:
-      dataset: oliverkinch/dynaword-bt
+      dataset: danish-foundation-models/danish-dynaword
       config_name: skat
       split: train
       text_field: text
@@ -49,4 +75,30 @@ sources:
       source_type: tax_guidance
       chunk_mode: passages
       full_text_max_chars: 1000
+      max_articles: 1
+
+  - name: miljoeportalen
+    source:
+      dataset: danish-foundation-models/danish-dynaword
+      config_name: miljoeportalen
+      split: train
+      text_field: text
+      id_field: id
+      streaming: true
+    generation:
+      source_type: government
+      chunk_mode: passages
+      full_text_max_chars: 1000
+      max_articles: 1
+
+  - name: ai-aktindsigt
+    source:
+      dataset: danish-foundation-models/danish-dynaword
+      config_name: ai-aktindsigt
+      split: train
+      text_field: text
+      id_field: id
+      streaming: true
+    generation:
+      source_type: government
       max_articles: 1
