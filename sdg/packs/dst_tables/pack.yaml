@@ -1,5 +1,5 @@
 name: dst_tables
-description: Build instruction data from Danmarks Statistik table data, generating natural prompts that include the raw table and use the real article as the response.
+description: Build instruction data from Danmarks Statistik table data, generating natural prompts that include the raw table(s) and use the real article as the response.
 entrypoints:
   build: sdg.packs.dst_tables.build:build
   verify: sdg.packs.dst_tables.build:verify
