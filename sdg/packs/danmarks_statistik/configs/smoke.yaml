@@ -1,0 +1,18 @@
+pack: danmarks_statistik
+reuse_completed: false
+models:
+  instruction_writer:
+    endpoint: openai
+    max_concurrency: 4
+source:
+  dataset: oliverkinch/danmarks-statistik
+  split: train
+  text_field: text
+  title_field: title
+  url_field: url
+  journal_field: content_type
+generation:
+  min_article_chars: 200
+  max_articles_per_journal: 3
+  temperature: 0.7
+  train_fraction: 0.9

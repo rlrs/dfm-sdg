@@ -1,0 +1,7 @@
+name: danmarks_statistik
+description: Build Danish instruction rows from Danmarks Statistik publications via backtranslation.
+entrypoints:
+  build: sdg.packs.danmarks_statistik.build:build
+  verify: sdg.packs.danmarks_statistik.build:verify
+  summarize: sdg.packs.danmarks_statistik.build:summarize
+  publish: sdg.packs.danmarks_statistik.build:publish
