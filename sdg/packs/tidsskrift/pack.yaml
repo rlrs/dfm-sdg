@@ -1,0 +1,7 @@
+name: tidsskrift
+description: Build Danish instruction rows from tidsskrift.dk journal articles via backtranslation.
+entrypoints:
+  build: sdg.packs.tidsskrift.build:build
+  verify: sdg.packs.tidsskrift.build:verify
+  summarize: sdg.packs.tidsskrift.build:summarize
+  publish: sdg.packs.tidsskrift.build:publish

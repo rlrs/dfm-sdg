@@ -1,0 +1,19 @@
+pack: tidsskrift
+reuse_completed: false
+models:
+  instruction_writer:
+    endpoint: openai
+    max_concurrency: 4
+source:
+  dataset: oliverkinch/tidsskrift-dk
+  split: train
+  text_field: text
+  title_field: title
+  url_field: url
+  journal_field: journal
+  journal_description_field: journal_description
+generation:
+  min_article_chars: 400
+  max_articles_per_journal: 1
+  temperature: 0.7
+  train_fraction: 0.9
