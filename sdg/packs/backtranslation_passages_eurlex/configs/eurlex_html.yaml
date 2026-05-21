@@ -1,0 +1,25 @@
+pack: backtranslation_passages_eurlex
+reuse_completed: false
+models:
+  instruction_writer:
+    endpoint: openai
+    max_concurrency: 50
+source:
+  dataset: oliverkinch/eur-lex
+  config_name: default
+  split: train
+  streaming: true
+  id_field: celex
+  title_field: title_da
+  text_field: text_da
+  url_field: url
+  resource_type_field: resource_type
+  text_source_field: text_source_da
+  allowed_text_sources:
+    - html
+generation:
+  content_type: legal
+  min_article_chars: 900
+  temperature: 0.8
+  train_fraction: 0.9
+  max_articles: null

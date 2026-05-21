@@ -1,0 +1,7 @@
+name: backtranslation_passages_eurlex
+description: Instruction backtranslation from EUR-Lex Danish legal passage chunks.
+entrypoints:
+  build: sdg.packs.backtranslation_passages_eurlex.build:build
+  verify: sdg.packs.backtranslation_passages_eurlex.build:verify
+  summarize: sdg.packs.backtranslation_passages_eurlex.build:summarize
+  publish: sdg.packs.backtranslation_passages_eurlex.build:publish
