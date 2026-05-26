@@ -1,4 +1,82 @@
 {
+  "Domsdatabasen": {
+    "source_type": "government",
+    "domain": "legal",
+    "license_name": "Danish Copyright Law §9",
+    "short_description": "Danish court judgments from the Domsdatabasen database, covering decisions from various Danish courts. Public sector legal documents published under Danish Copyright Law §9.",
+    "style_hints": [
+      "formal judicial reasoning and argumentation",
+      "structured court judgment format with findings and rulings",
+      "legal prose with citations and statutory references"
+    ],
+    "typical_length": "medium_to_long",
+    "chunking_recommendation": "passages"
+  },
+  "adl": {
+    "source_type": "literary",
+    "domain": "literature",
+    "license_name": "CC-0",
+    "short_description": "Digitized Danish literary texts from the Archive of Danish Literature (Arkiv for Dansk Litteratur), covering canonical works across multiple centuries.",
+    "style_hints": [
+      "literary and narrative prose",
+      "varied register from classical to modern Danish",
+      "formal and expressive language with rich vocabulary"
+    ],
+    "typical_length": "very_long",
+    "chunking_recommendation": "passages"
+  },
+  "ai-aktindsigt": {
+    "source_type": "government",
+    "domain": "web",
+    "license_name": "Apache 2.0",
+    "short_description": "Municipality website scrapes collected for the AI-aktindsigt project, with broad public-service topics.",
+    "style_hints": [
+      "municipality information style",
+      "service pages and contact details",
+      "mixed content quality and structure"
+    ],
+    "typical_length": "short_to_medium",
+    "chunking_recommendation": "hybrid"
+  },
+  "botxt": {
+    "source_type": "literary",
+    "domain": "literature",
+    "license_name": "CC-0",
+    "short_description": "Bornholmsk dialect literary texts, containing fiction and prose written in the Bornholmsk regional dialect of Danish.",
+    "style_hints": [
+      "regional dialect prose with non-standard orthography",
+      "narrative literary style",
+      "short to medium fiction and descriptive texts"
+    ],
+    "typical_length": "short_to_medium",
+    "chunking_recommendation": "hybrid"
+  },
+  "cellar": {
+    "source_type": "government",
+    "domain": "legal",
+    "license_name": "CC-BY-SA 4.0",
+    "short_description": "EU legal and legislative documents from the Publications Office of the European Union's CELLAR repository, covering regulations, directives, and official texts in Danish.",
+    "style_hints": [
+      "formal EU legislative drafting style",
+      "technical legal language with numbered articles",
+      "official institutional register"
+    ],
+    "typical_length": "medium_to_long",
+    "chunking_recommendation": "passages"
+  },
+  "dannet": {
+    "source_type": "news",
+    "domain": "lexical",
+    "license_name": "DanNet 1.0",
+    "short_description": "Entries from DanNet, the Danish lexical database and wordnet, providing definitions, synsets, and semantic relations for Danish vocabulary.",
+    "style_hints": [
+      "concise definitional and lexicographic style",
+      "structured vocabulary entries",
+      "short reference-style descriptions"
+    ],
+    "typical_length": "short_to_medium",
+    "chunking_recommendation": "hybrid"
+  },
   "danske-taler": {
     "source_type": "speech",
     "domain": "conversation",
@@ -12,6 +90,71 @@
     "typical_length": "medium_to_long",
     "chunking_recommendation": "hybrid"
   },
+  "depbank": {
+    "source_type": "literary",
+    "domain": "literature",
+    "license_name": "CC-BY-SA 4.0",
+    "short_description": "Source texts from the PAROLE-DK Danish dependency treebank (1998), comprising news articles and other written texts annotated for linguistic analysis.",
+    "style_hints": [
+      "journalistic news prose from the late 1990s",
+      "standard written Danish register",
+      "short to medium factual texts"
+    ],
+    "typical_length": "short_to_medium",
+    "chunking_recommendation": "hybrid"
+  },
+  "enevaeldens_nyheder": {
+    "source_type": "news",
+    "domain": "news",
+    "license_name": "CC-BY-SA 4.0",
+    "short_description": "Historical Danish and Norwegian newspapers from the absolutism era (1660–1849), digitized from the Royal Library's collections.",
+    "style_hints": [
+      "archaic historical Danish and Norwegian orthography",
+      "early newspaper prose with varied topics",
+      "formal 18th-19th century journalistic register"
+    ],
+    "typical_length": "short_to_medium",
+    "chunking_recommendation": "hybrid"
+  },
+  "ep": {
+    "source_type": "speech",
+    "domain": "conversation",
+    "license_name": "CC-0",
+    "short_description": "Danish-language proceedings from the European Parliament (Europarl corpus), covering plenary session debates and speeches.",
+    "style_hints": [
+      "formal parliamentary debate and speech",
+      "policy-oriented and multi-speaker discourse",
+      "EU institutional register with procedural language"
+    ],
+    "typical_length": "long",
+    "chunking_recommendation": "passages"
+  },
+  "eur-lex-sum-da": {
+    "source_type": "government",
+    "domain": "legal",
+    "license_name": "CC-BY-SA 4.0",
+    "short_description": "Danish-language summaries of EU legislation from EUR-Lex, covering regulations, directives, and legal acts with concise official abstracts.",
+    "style_hints": [
+      "concise official EU legal summaries",
+      "formal regulatory language",
+      "structured summary format with purpose and scope"
+    ],
+    "typical_length": "medium_to_long",
+    "chunking_recommendation": "passages"
+  },
+  "fm-udgivelser": {
+    "source_type": "government",
+    "domain": "legal",
+    "license_name": "CC-BY-SA 4.0",
+    "short_description": "Publications from the Danish Ministry of Finance (Finansministeriet), including policy documents, budget analyses, and official reports.",
+    "style_hints": [
+      "formal government policy and financial reporting",
+      "analytical and structured document format",
+      "official public sector administrative style"
+    ],
+    "typical_length": "very_long",
+    "chunking_recommendation": "passages"
+  },
   "ft": {
     "source_type": "speech",
     "domain": "conversation",
@@ -21,6 +164,188 @@
       "formal parliamentary register",
       "procedural and policy-heavy",
       "single-speaker monologue segments"
+    ],
+    "typical_length": "very_long",
+    "chunking_recommendation": "passages"
+  },
+  "grundtvig": {
+    "source_type": "literary",
+    "domain": "literature",
+    "license_name": "CC-0",
+    "short_description": "Collected works of N.F.S. Grundtvig, the influential 19th-century Danish writer, theologian, and educational reformer.",
+    "style_hints": [
+      "19th-century literary and theological prose",
+      "rhetorical and expressive style",
+      "varied genres including sermons, poetry, and historical writing"
+    ],
+    "typical_length": "medium_to_long",
+    "chunking_recommendation": "passages"
+  },
+  "gutenberg": {
+    "source_type": "literary",
+    "domain": "books",
+    "license_name": "CC-0",
+    "short_description": "Public-domain Danish-language literary texts from Project Gutenberg, spanning multiple genres and historical periods.",
+    "style_hints": [
+      "varied literary prose from historical periods",
+      "classical narrative and descriptive style",
+      "formal and expressive written Danish"
+    ],
+    "typical_length": "very_long",
+    "chunking_recommendation": "passages"
+  },
+  "health_hovedstaden": {
+    "source_type": "government",
+    "domain": "web",
+    "license_name": "CC-0",
+    "short_description": "Health information web content from the Capital Region of Denmark (Region Hovedstaden), covering patient information, medical procedures, and public health guidance.",
+    "style_hints": [
+      "clear patient-facing health information",
+      "clinical and administrative language",
+      "structured informational pages with procedure descriptions"
+    ],
+    "typical_length": "short_to_medium",
+    "chunking_recommendation": "hybrid"
+  },
+  "jvj": {
+    "source_type": "literary",
+    "domain": "literature",
+    "license_name": "CC-BY-SA 4.0",
+    "short_description": "Complete works of Johannes V. Jensen, the Danish Nobel Prize-winning author, including novels, essays, and poetry from the early 20th century.",
+    "style_hints": [
+      "modernist literary prose with distinctive style",
+      "narrative and descriptive with rich imagery",
+      "varied registers across fiction, essay, and lyric forms"
+    ],
+    "typical_length": "very_long",
+    "chunking_recommendation": "passages"
+  },
+  "kb_administrative_publication": {
+    "source_type": "government",
+    "domain": "legal",
+    "license_name": "CC-0",
+    "short_description": "Administrative publications digitized from the collections of the Royal Danish Library (Kongelige Bibliotek), covering public reports, official documents, and institutional texts.",
+    "style_hints": [
+      "formal administrative and bureaucratic language",
+      "structured report and publication format",
+      "official public sector document style"
+    ],
+    "typical_length": "very_long",
+    "chunking_recommendation": "passages"
+  },
+  "kb_historical_letters": {
+    "source_type": "literary",
+    "domain": "literature",
+    "license_name": "CC-0",
+    "short_description": "Historical letters and correspondence digitized from the collections of the Royal Danish Library, spanning multiple centuries of Danish epistolary heritage.",
+    "style_hints": [
+      "personal and formal epistolary style",
+      "historical Danish orthography and register",
+      "varied from intimate to official correspondence"
+    ],
+    "typical_length": "short_to_medium",
+    "chunking_recommendation": "hybrid"
+  },
+  "memo": {
+    "source_type": "literary",
+    "domain": "literature",
+    "license_name": "CC-BY-SA 4.0",
+    "short_description": "Canonical Danish novels from 1870–1899, selected as part of the MeMo project to represent the golden age of Danish fiction.",
+    "style_hints": [
+      "19th-century literary narrative prose",
+      "formal and expressive classical Danish style",
+      "third-person narrative with descriptive passages"
+    ],
+    "typical_length": "very_long",
+    "chunking_recommendation": "passages"
+  },
+  "miljoeportalen": {
+    "source_type": "government",
+    "domain": "web",
+    "license_name": "CC-0",
+    "short_description": "Public environmental portal content from Danish authorities, often technical and document-like.",
+    "style_hints": [
+      "public sector information style",
+      "regulatory and planning context",
+      "administrative structure and terminology"
+    ],
+    "typical_length": "very_long",
+    "chunking_recommendation": "passages"
+  },
+  "municipality_meetings": {
+    "source_type": "government",
+    "domain": "legal",
+    "license_name": "CC-0",
+    "short_description": "Committee meeting records from 5 Danish municipalities, covering city council and environmental/technical committee minutes from 2014 onwards.",
+    "style_hints": [
+      "formal administrative language",
+      "structured meeting minutes with decision sections",
+      "pseudonymized and redacted official records"
+    ],
+    "typical_length": "medium_to_long",
+    "chunking_recommendation": "hybrid"
+  },
+  "naat": {
+    "source_type": "speech",
+    "domain": "conversation",
+    "license_name": "CC-0",
+    "short_description": "Transcribed spoken Danish content including accessible audio descriptions and broadcast narration.",
+    "style_hints": [
+      "spoken language transcriptions",
+      "natural conversational register",
+      "accessible and clear descriptive language"
+    ],
+    "typical_length": "short_to_medium",
+    "chunking_recommendation": "hybrid"
+  },
+  "ncc_books": {
+    "source_type": "literary",
+    "domain": "books",
+    "license_name": "CC-0",
+    "short_description": "Danish books extracted from the Norwegian Colossal Corpus via OCR, sourced from the National Library of Norway's digitized collections. Covers a wide range of historical and contemporary Danish literature.",
+    "style_hints": [
+      "varied literary prose",
+      "historical and contemporary register",
+      "OCR-derived text with occasional recognition errors"
+    ],
+    "typical_length": "very_long",
+    "chunking_recommendation": "passages"
+  },
+  "ncc_maalfrid": {
+    "source_type": "government",
+    "domain": "web",
+    "license_name": "NLOD 2.0",
+    "short_description": "Danish-language content scraped from Norwegian institutional websites, extracted from the Målfrid collection within the Norwegian Colossal Corpus.",
+    "style_hints": [
+      "institutional and governmental web prose",
+      "formal to semi-formal register",
+      "short to medium-length informational texts"
+    ],
+    "typical_length": "short_to_medium",
+    "chunking_recommendation": "hybrid"
+  },
+  "ncc_newspaper": {
+    "source_type": "news",
+    "domain": "news",
+    "license_name": "CC-0",
+    "short_description": "OCR-scanned historical Danish newspaper articles drawn from the Norwegian Colossal Corpus, sourced from the National Library of Norway's digitized newspaper archive.",
+    "style_hints": [
+      "historical newspaper prose",
+      "concise journalistic style",
+      "OCR-derived with archaic expressions"
+    ],
+    "typical_length": "short_to_medium",
+    "chunking_recommendation": "hybrid"
+  },
+  "ncc_parliament": {
+    "source_type": "speech",
+    "domain": "government",
+    "license_name": "NLOD 2.0",
+    "short_description": "Historical Danish-language proceedings from the Norwegian Parliament (Stortinget), OCR-scanned from digitized documents in the Norwegian Colossal Corpus.",
+    "style_hints": [
+      "formal parliamentary debate language",
+      "historical and archaic register",
+      "OCR-derived with occasional recognition errors"
     ],
     "typical_length": "very_long",
     "chunking_recommendation": "passages"
@@ -38,18 +363,70 @@
     "typical_length": "short_to_medium",
     "chunking_recommendation": "hybrid"
   },
-  "tv2r": {
-    "source_type": "news",
-    "domain": "news",
-    "license_name": "CC-BY-SA 4.0",
-    "short_description": "Contemporary Danish newswire from TV 2 regional outlets, covering local events and entities.",
+  "nota": {
+    "source_type": "literary",
+    "domain": "books",
+    "license_name": "CC-0",
+    "short_description": "Danish accessible books from Nota, the Danish library for people with print disabilities, covering a wide range of literary and non-fiction genres.",
     "style_hints": [
-      "neutral journalistic tone",
-      "current affairs and local reporting",
-      "headline plus body article structure"
+      "accessible and readable prose style",
+      "varied literary and non-fiction registers",
+      "clear narrative and expository language"
     ],
-    "typical_length": "short_to_medium",
+    "typical_length": "medium_to_long",
+    "chunking_recommendation": "passages"
+  },
+  "opensubtitles": {
+    "source_type": "literary",
+    "domain": "conversation",
+    "license_name": "CC-0",
+    "short_description": "Danish subtitles from films and TV shows, drawn from the OpenSubtitles corpus. Represents colloquial spoken Danish as rendered in screen dialogue.",
+    "style_hints": [
+      "informal conversational dialogue",
+      "colloquial and idiomatic Danish",
+      "short utterances with speaker-driven exchanges"
+    ],
+    "typical_length": "medium_to_long",
     "chunking_recommendation": "hybrid"
+  },
+  "relig": {
+    "source_type": "literary",
+    "domain": "literature",
+    "license_name": "CC-0",
+    "short_description": "Danish religious texts spanning 1700–2022, primarily a Danish translation of the Bible from the Massively Parallel Bible corpus.",
+    "style_hints": [
+      "poetic and scriptural prose",
+      "formal and elevated register",
+      "narrative religious literature"
+    ],
+    "typical_length": "medium_to_long",
+    "chunking_recommendation": "hybrid"
+  },
+  "retsinformationdk": {
+    "source_type": "government",
+    "domain": "legal",
+    "license_name": "Danish Copyright Law §9",
+    "short_description": "Official Danish legal information system containing legislation, administrative regulations, executive orders, preparatory legislative works, and case law references.",
+    "style_hints": [
+      "technical legal language",
+      "highly structured legislative drafting style",
+      "formal official Danish with citations and cross-references"
+    ],
+    "typical_length": "medium_to_long",
+    "chunking_recommendation": "passages"
+  },
+  "retspraksis": {
+    "source_type": "government",
+    "domain": "legal",
+    "license_name": "CC-0",
+    "short_description": "Danish court judgments and case law from the Retspraksis legal database, covering decisions from 2000–2022 across Danish courts including the Supreme Court.",
+    "style_hints": [
+      "formal judicial prose",
+      "structured court judgment format",
+      "precise legal argumentation and ruling language"
+    ],
+    "typical_length": "medium_to_long",
+    "chunking_recommendation": "passages"
   },
   "skat": {
     "source_type": "tax_guidance",
@@ -64,30 +441,82 @@
     "typical_length": "long",
     "chunking_recommendation": "passages"
   },
-  "miljoeportalen": {
-    "source_type": "government",
-    "domain": "web",
-    "license_name": "CC-0",
-    "short_description": "Public environmental portal content from Danish authorities, often technical and document-like.",
+  "tidsskrift-dk": {
+    "source_type": "academic",
+    "domain": "academic",
+    "license_name": "CC-BY 4.0",
+    "short_description": "Danish open-access academic journal articles from the Royal Danish Library's tidsskrift.dk portal, covering diverse scholarly disciplines.",
     "style_hints": [
-      "public sector information style",
-      "regulatory and planning context",
-      "administrative structure and terminology"
+      "academic and scholarly prose",
+      "formal Danish with discipline-specific terminology",
+      "structured article format with section headers"
     ],
-    "typical_length": "very_long",
+    "typical_length": "medium_to_long",
     "chunking_recommendation": "passages"
   },
-  "ai-aktindsigt": {
-    "source_type": "government",
-    "domain": "web",
-    "license_name": "Apache 2.0",
-    "short_description": "Municipality website scrapes collected for the AI-aktindsigt project, with broad public-service topics.",
+  "tv2r": {
+    "source_type": "news",
+    "domain": "news",
+    "license_name": "CC-BY-SA 4.0",
+    "short_description": "Contemporary Danish newswire from TV 2 regional outlets, covering local events and entities.",
     "style_hints": [
-      "municipality information style",
-      "service pages and contact details",
-      "mixed content quality and structure"
+      "neutral journalistic tone",
+      "current affairs and local reporting",
+      "headline plus body article structure"
     ],
     "typical_length": "short_to_medium",
+    "chunking_recommendation": "hybrid"
+  },
+  "wiki": {
+    "source_type": "news",
+    "domain": "encyclopedic",
+    "license_name": "CC-0",
+    "short_description": "Danish-language Wikipedia articles covering a broad range of topics, extracted from Wikimedia database dumps.",
+    "style_hints": [
+      "neutral encyclopedic prose",
+      "factual and well-structured",
+      "varied topics and named entities"
+    ],
+    "typical_length": "short_to_medium",
+    "chunking_recommendation": "hybrid"
+  },
+  "wiki_misc": {
+    "source_type": "news",
+    "domain": "encyclopedic",
+    "license_name": "CC-0",
+    "short_description": "Miscellaneous Danish Wikipedia content not covered by the main wiki subset, including supplementary articles and auxiliary pages.",
+    "style_hints": [
+      "encyclopedic reference prose",
+      "factual and structured",
+      "neutral informational style"
+    ],
+    "typical_length": "medium_to_long",
+    "chunking_recommendation": "hybrid"
+  },
+  "wikibooks": {
+    "source_type": "news",
+    "domain": "books",
+    "license_name": "CC-0",
+    "short_description": "Educational and instructional texts from the Danish section of Wikibooks, covering diverse subjects in a structured format.",
+    "style_hints": [
+      "educational and instructional tone",
+      "structured chapters and sections",
+      "encyclopedic reference style"
+    ],
+    "typical_length": "medium_to_long",
+    "chunking_recommendation": "hybrid"
+  },
+  "wikisource": {
+    "source_type": "literary",
+    "domain": "literature",
+    "license_name": "CC-0",
+    "short_description": "Literary and historical texts from the Danish subsection of Wikisource, including public-domain works and cultural heritage documents.",
+    "style_hints": [
+      "literary and historical prose",
+      "varied register from old to modern Danish",
+      "formal and expressive language"
+    ],
+    "typical_length": "medium_to_long",
     "chunking_recommendation": "hybrid"
   }
 }

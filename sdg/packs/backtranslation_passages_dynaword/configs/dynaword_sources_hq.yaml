@@ -1,0 +1,24 @@
+pack: backtranslation_passages_dynaword
+reuse_completed: false
+id_filter_path: high_quality_ids_capped.tsv
+models:
+  instruction_writer:
+    endpoint: openai
+    max_concurrency: 50
+generation:
+  min_article_chars: 400
+  full_text_max_chars: 1400
+  max_chars: 2500
+  max_passages_per_article: 2
+  chunk_mode: hybrid
+  temperature: 0.8
+  train_fraction: 0.9
+auto_source:
+  dataset: danish-foundation-models/danish-dynaword
+  text_field: text
+  id_field: id
+  streaming: true
+  config_name_map:
+    Domsdatabasen: domsdatabasen
+    wiki: wikipedia
+    wiki_misc: wiki-comments

@@ -275,11 +275,16 @@ def _build_run(
     del seed
 
     source_contexts = _load_source_contexts()
-    _validate_source_contexts(_source_entries(cfg), source_contexts)
+    allowed_ids = _load_id_filter(cfg)
+    is_auto = "auto_source" in cfg
+    if is_auto:
+        config_names = _load_config_names_from_filter(cfg)
+        cfg = _expand_cfg_auto_sources(cfg, source_contexts, config_names=config_names)
+    _validate_source_contexts(_source_entries(cfg), source_contexts, warn_only=is_auto)
     dataset_path = outputs_dir / "dataset.jsonl"
     failures_path = outputs_dir / "generation_failures.jsonl"
     resume_state = _load_resume_state(dataset_path=dataset_path, failures_path=failures_path)
-    source_stats = _count_passages(cfg, processed_source_ids=resume_state["processed_source_ids"])
+    source_stats = _count_passages(cfg, processed_source_ids=resume_state["processed_source_ids"], allowed_ids=allowed_ids)
     writer = _load_instruction_writer(cfg)
     _progress_log(
         f"loaded {source_stats['pending_rows']} pending passages after scanning "
@@ -292,6 +297,7 @@ def _build_run(
         dataset_path=dataset_path,
         failures_path=failures_path,
         processed_source_ids=resume_state["processed_source_ids"],
+        allowed_ids=allowed_ids,
         pending_rows=source_stats["pending_rows"],
         starting_completed_rows=resume_state["completed_rows"],
         starting_failed_rows=resume_state["failed_rows"],
@@ -329,6 +335,7 @@ def _count_passages(
     cfg: dict[str, Any],
     *,
     processed_source_ids: set[str],
+    allowed_ids: frozenset[str] | None = None,
 ) -> dict[str, Any]:
     entries = _source_entries(cfg)
     if not entries:
@@ -367,6 +374,8 @@ def _count_passages(
             record_index = source_scanned_rows - 1
             article = _record_to_article(record, source, record_index)
             if article is None:
+                continue
+            if allowed_ids is not None and article["source_id"] not in allowed_ids:
                 continue
 
             usable_rows += 1
@@ -430,6 +439,7 @@ def _iter_passages(
     cfg: dict[str, Any],
     *,
     processed_source_ids: set[str],
+    allowed_ids: frozenset[str] | None = None,
 ):
     for source_index, entry in enumerate(_source_entries(cfg)):
         source = entry["source"]
@@ -441,6 +451,8 @@ def _iter_passages(
         for index, record in enumerate(common_sources.iter_source_records(source)):
             article = _record_to_article(record, source, index)
             if article is None:
+                continue
+            if allowed_ids is not None and article["source_id"] not in allowed_ids:
                 continue
             if len(article["text"]) < min_article_chars:
                 continue
@@ -483,7 +495,9 @@ def _iter_chunks(
     else:
         passages = _extract_passages(text, min_chars=min_chars, max_chars=max_chars)
         if not passages and len(text) >= min_chars:
-            passages = [text[:max_chars].strip()]
+            fallback = text[:max_chars].strip()
+            if _passage_is_usable_for_instruction_tuning(fallback, min_chars=min_chars):
+                passages = [fallback]
 
     filtered_passages = [
         passage_text
@@ -549,10 +563,6 @@ def _score_paragraph_web(p: str) -> float:
     if p.lstrip().startswith("<"):
         return 0.0
 
-    stripped = p.lstrip()
-    if stripped and stripped[0].islower():
-        return 0.0
-
     if re.match(r"^\s*(foto|figur\s*\d|kilde)\s*:", p, re.IGNORECASE):
         return 0.0
     if re.search(r"\bFoto:\s+[A-ZÆØÅ]\w", p):
@@ -584,9 +594,20 @@ def _score_paragraph_web(p: str) -> float:
     return alpha_ratio * length_score
 
 
+def _strip_frontmatter(text: str) -> str:
+    if not text.startswith("---\n"):
+        return text
+    end = text.find("\n---\n", 4)
+    if end == -1:
+        return text
+    return text[end + 5:].lstrip("\n")
+
+
 def _passage_is_usable_for_instruction_tuning(text: str, *, min_chars: int) -> bool:
     candidate = text.strip()
     if len(candidate) < min_chars:
+        return False
+    if _is_colophon_or_masthead(candidate):
         return False
     if _contains_sensitive_content(candidate):
         return False
@@ -595,6 +616,13 @@ def _passage_is_usable_for_instruction_tuning(text: str, *, min_chars: int) -> b
     if _is_too_repetitive(candidate):
         return False
     return True
+
+
+def _is_colophon_or_masthead(text: str) -> bool:
+    head = text[:300]
+    markers = ("telefon:", "tlf.:", "email:", "e-mail:", "issn ", "isbn ", "@")
+    hits = sum(1 for m in markers if m in head.lower())
+    return hits >= 2
 
 
 def _contains_sensitive_content(text: str) -> bool:
@@ -632,6 +660,10 @@ def _has_ocr_noise(text: str) -> bool:
 
     upper_tokens = [token for token in tokens if len(token) >= 4 and token.isupper()]
     if len(upper_tokens) / len(tokens) > 0.2:
+        return True
+
+    # OCR inter-word double-spacing: "word  word" pattern (not indentation)
+    if len(re.findall(r"\w  \w", text)) > 8:
         return True
 
     return False
@@ -672,6 +704,10 @@ def _instruction_messages(
         return _instruction_messages_government(article, source_context, prompt_length=prompt_length)
     if source_type == "speech":
         return _instruction_messages_speech(article, source_context, prompt_length=prompt_length)
+    if source_type == "literary":
+        return _instruction_messages_literary(article, source_context, prompt_length=prompt_length)
+    if source_type == "academic":
+        return _instruction_messages_academic(article, source_context, prompt_length=prompt_length)
     return _instruction_messages_news(article, source_context, prompt_length=prompt_length)
 
 
@@ -733,6 +769,45 @@ def _instruction_messages_government(
     return _build_messages(article, source_context, system_lines, "Skriv en prompt der ville få en AI til at skrive ovenstående offentlige informations- eller myndighedstekst.")
 
 
+def _instruction_messages_literary(
+    article: dict[str, Any],
+    source_context: dict[str, Any],
+    *,
+    prompt_length: str,
+) -> list[dict[str, str]]:
+    length_rule = _LENGTH_RULES.get(prompt_length, _LENGTH_RULES["medium"])
+    system_lines = [
+        "Du er en assistent der laver træningsdata til sprogmodeller.",
+        "Du svarer KUN med selve prompten — ingen forklaringer, overskrifter eller meta-kommentarer.",
+        length_rule,
+        "Prompten skal bede om en litterær tekst: prosa, roman-uddrag, novelle, essay, brev eller lignende.",
+        "Prompten skal fokusere på genre, tone og tematik — ikke reproducere konkrete karakterer eller handlingsforløb fra teksten.",
+        "Prompten må ikke genbruge konkrete navne, datoer eller unikke hændelser fra teksten.",
+        "Prompten skal være selvstændig og uden henvisning til den vedlagte tekst.",
+        "Undgå vinkler der opfordrer til had, diskrimination eller ekstremisme.",
+    ]
+    return _build_messages(article, source_context, system_lines, "Skriv en prompt der ville få en AI til at skrive ovenstående litterære tekst eller prosauddrag.")
+
+
+def _instruction_messages_academic(
+    article: dict[str, Any],
+    source_context: dict[str, Any],
+    *,
+    prompt_length: str,
+) -> list[dict[str, str]]:
+    length_rule = _LENGTH_RULES.get(prompt_length, _LENGTH_RULES["medium"])
+    system_lines = [
+        "Du er en assistent der laver træningsdata til sprogmodeller.",
+        "Du svarer KUN med selve prompten — ingen forklaringer, overskrifter eller meta-kommentarer.",
+        length_rule,
+        "Prompten skal bede om en akademisk eller faglig tekst: artikel, afsnit, litteraturgennemgang eller faglig analyse.",
+        "Prompten skal fokusere på fagområde og teksttype — ikke reproducere specifikke resultater eller konklusioner fra teksten.",
+        "Prompten må ikke genbruge konkrete navne, datoer eller unikke hændelser fra teksten.",
+        "Prompten skal være selvstændig og uden henvisning til den vedlagte tekst.",
+    ]
+    return _build_messages(article, source_context, system_lines, "Skriv en prompt der ville få en AI til at skrive ovenstående akademiske eller faglige tekst.")
+
+
 def _instruction_messages_tax_guidance(
     article: dict[str, Any],
     source_context: dict[str, Any],
@@ -786,6 +861,7 @@ def _record_to_article(
     )
     if not text:
         return None
+    text = _strip_frontmatter(text)
 
     title = common_sources.read_record_value(record, source.get("title_field", "title"))
     url = common_sources.read_record_value(record, source.get("url_field", "url"))
@@ -820,6 +896,7 @@ def _make_rows(
     dataset_path: Path,
     failures_path: Path,
     processed_source_ids: set[str],
+    allowed_ids: frozenset[str] | None,
     pending_rows: int,
     starting_completed_rows: int,
     starting_failed_rows: int,
@@ -832,6 +909,7 @@ def _make_rows(
             dataset_path=dataset_path,
             failures_path=failures_path,
             processed_source_ids=processed_source_ids,
+            allowed_ids=allowed_ids,
             pending_rows=pending_rows,
             starting_completed_rows=starting_completed_rows,
             starting_failed_rows=starting_failed_rows,
@@ -847,6 +925,7 @@ async def _make_rows_async(
     dataset_path: Path,
     failures_path: Path,
     processed_source_ids: set[str],
+    allowed_ids: frozenset[str] | None,
     pending_rows: int,
     starting_completed_rows: int,
     starting_failed_rows: int,
@@ -876,7 +955,7 @@ async def _make_rows_async(
     failures_mode = "a" if failures_path.exists() else "w"
     with dataset_path.open(dataset_mode) as dataset_handle, failures_path.open(failures_mode) as failures_handle:
         async for row in map_async_ordered(
-            _iter_passages(cfg, processed_source_ids=processed_source_ids),
+            _iter_passages(cfg, processed_source_ids=processed_source_ids, allowed_ids=allowed_ids),
             lambda _ignored_index, passage: _generate_row_result(
                 article=passage,
                 writer=writer,
@@ -1229,7 +1308,7 @@ def _looks_like_user_request(text: str) -> bool:
         return True
     return bool(
         re.search(
-            r"\b(kan\s+du|kan\s+vi|skriv|lav|udarbejd|hjælp|giv|forklar|opsummer|formuler|foreslå|generer|beskriv|oversæt|fremlæg|redegør|gennemgå)\b",
+            r"\b(kan\s+du|kan\s+vi|skriv|lav|udarbejd|hjælp|giv|forklar|opsummer|formuler|foreslå|generer|beskriv|oversæt|fremlæg|redegør|gennemgå|analyser|diskutér|diskuter|sammenlign|vurdér|vurder|undersøg)\b",
             text,
             re.IGNORECASE,
         )
@@ -1237,7 +1316,13 @@ def _looks_like_user_request(text: str) -> bool:
 
 
 def _contains_shouting_token(text: str) -> bool:
-    allowed = {"AI", "USA", "EU", "SKAT", "NIS2", "CITES", "IDA", "HOFOR"}
+    allowed = {
+        "AI", "EU", "FN", "USA", "SKAT", "NIS2", "CITES", "IDA", "HOFOR",
+        "GDPR", "NATO", "OECD", "OSCE", "IAEA", "GEUS", "DONG", "DJØF",
+        "UNICEF", "UNESCO", "UNHCR", "UNFPA", "UNODC",
+        "EUROPA", "EULEX", "FRONTEX", "EUROPOL", "INTERPOL",
+        "COVID",
+    }
     for token in re.findall(r"\b[A-ZÆØÅ]{4,}\b", text):
         if token not in allowed:
             return True
@@ -1278,6 +1363,11 @@ def shared_numeric_tokens(prompt: str, target: str) -> int:
 
 
 def _source_entries(cfg: dict[str, Any]) -> list[dict[str, Any]]:
+    if "auto_source" in cfg and "sources" not in cfg:
+        auto = dict(cfg["auto_source"])
+        generation = dict(cfg.get("generation", {}))
+        return [{"key": "auto", "name": "auto-discovered", "source": auto, "generation": generation}]
+
     if "sources" in cfg:
         entries = list(cfg["sources"])
         assert entries, "sources must not be empty"
@@ -1472,6 +1562,97 @@ def _drop_none(value: dict[str, Any]) -> dict[str, Any]:
     return {key: item for key, item in value.items() if item is not None}
 
 
+def _resolve_filter_path(path_str: str) -> Path:
+    path = Path(path_str).expanduser()
+    if not path.is_absolute():
+        path = Path.cwd() / path
+    return path
+
+
+def _parse_tsv_filter(path: Path) -> tuple[frozenset[str], frozenset[str] | None]:
+    ids: set[str] = set()
+    config_names: set[str] = set()
+    has_source_col = False
+    with path.open() as fh:
+        for i, line in enumerate(fh):
+            row = line.strip()
+            if not row:
+                continue
+            parts = row.split("\t")
+            if i == 0 and parts[0].lower() == "id":
+                has_source_col = len(parts) >= 2 and parts[1].lower() == "source"
+                continue
+            id_val = parts[0].strip()
+            if id_val:
+                ids.add(id_val)
+            if has_source_col and len(parts) >= 2 and parts[1].strip():
+                config_names.add(parts[1].strip())
+    return frozenset(ids), frozenset(config_names) if has_source_col else None
+
+
+def _load_id_filter(cfg: dict[str, Any]) -> frozenset[str] | None:
+    path_str = cfg.get("id_filter_path")
+    if path_str is None:
+        return None
+    path = _resolve_filter_path(path_str)
+    if path.suffix == ".tsv":
+        ids, _ = _parse_tsv_filter(path)
+    else:
+        ids = frozenset(line.strip() for line in path.read_text().splitlines() if line.strip())
+    _progress_log(f"loaded id_filter with {len(ids):,} IDs from {path}")
+    return ids
+
+
+def _load_config_names_from_filter(cfg: dict[str, Any]) -> frozenset[str] | None:
+    path_str = cfg.get("id_filter_path")
+    if path_str is None:
+        return None
+    path = _resolve_filter_path(path_str)
+    if path.suffix != ".tsv":
+        return None
+    _, config_names = _parse_tsv_filter(path)
+    if config_names is not None:
+        _progress_log(f"loaded {len(config_names):,} distinct config names from {path}")
+    return config_names
+
+
+def _expand_cfg_auto_sources(
+    cfg: dict[str, Any],
+    source_contexts: dict[str, dict[str, Any]],
+    *,
+    config_names: frozenset[str] | None,
+) -> dict[str, Any]:
+    auto_source = dict(cfg["auto_source"])
+    dataset_name = auto_source["dataset"]
+    config_name_map: dict[str, str] = dict(auto_source.pop("config_name_map", {}))
+
+    if config_names is None:
+        from datasets import get_dataset_config_names as _hf_config_names
+
+        _progress_log(f"discovering configs for {dataset_name!r} via HuggingFace")
+        config_names = frozenset(_hf_config_names(dataset_name))
+        _progress_log(f"discovered {len(config_names)} configs")
+    else:
+        _progress_log(f"using {len(config_names)} configs from id_filter_path")
+
+    base_generation = dict(cfg.get("generation", {}))
+    sources: list[dict[str, Any]] = []
+    for source_name in sorted(config_names):
+        hf_config_name = config_name_map.get(source_name, source_name)
+        source = {**auto_source, "config_name": hf_config_name}
+        generation = dict(base_generation)
+        if source_name in source_contexts:
+            ctx = source_contexts[source_name]
+            if "chunking_recommendation" in ctx:
+                generation["chunk_mode"] = ctx["chunking_recommendation"]
+            if "source_type" in ctx:
+                generation["source_type"] = ctx["source_type"]
+        sources.append({"name": source_name, "source": source, "generation": generation})
+
+    _progress_log(f"expanded auto_source to {len(sources)} source entries")
+    return {**cfg, "sources": sources}
+
+
 def _load_source_contexts() -> dict[str, dict[str, Any]]:
     payload = read_json(_SOURCE_CONTEXTS_PATH)
     assert isinstance(payload, dict), "source_contexts.json must be a JSON object"
@@ -1483,6 +1664,17 @@ def _load_source_contexts() -> dict[str, dict[str, Any]]:
     return normalized
 
 
-def _validate_source_contexts(entries: list[dict[str, Any]], source_contexts: dict[str, dict[str, Any]]) -> None:
+def _validate_source_contexts(
+    entries: list[dict[str, Any]],
+    source_contexts: dict[str, dict[str, Any]],
+    *,
+    warn_only: bool = False,
+) -> None:
     missing = sorted(entry["name"] for entry in entries if entry["name"] not in source_contexts)
-    assert not missing, f"Missing source contexts for: {', '.join(missing)}"
+    if not missing:
+        return
+    if warn_only:
+        preview = ", ".join(missing[:5]) + ("..." if len(missing) > 5 else "")
+        _progress_log(f"no source context for {len(missing)} config(s), using defaults: {preview}")
+    else:
+        assert not missing, f"Missing source contexts for: {', '.join(missing)}"
